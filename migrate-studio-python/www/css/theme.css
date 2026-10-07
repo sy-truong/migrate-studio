@@ -1,0 +1,279 @@
+/* ===========================================================================
+ * Migrate Studio — time-of-day theme
+ *
+ * Light 06:00–17:59 Pacific, dark 18:00–05:59, exactly as the rest of the
+ * site. The switch is the inline script in index.html's <head>, which stamps
+ * data-theme on <html> before the first paint; this file supplies the palette
+ * that stamp selects.
+ *
+ * Link this AFTER css/migrate-studio.css. Most of the dark theme is done by
+ * re-pointing the core tokens; the rules below the token block are the places
+ * where a literal light colour was baked into a component and has to be
+ * answered directly. Every dark rule is scoped to the data-theme attribute, so
+ * it outranks the unscoped original on specificity and source order is belt
+ * and braces rather than load-bearing.
+ * =========================================================================
+ * Migrate Studio
+ *
+ * Copyright (c) 2026 Meta-Xceed, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
+:root{color-scheme:light}
+
+:root[data-theme="dark"]{
+  color-scheme:dark;
+
+  /* ---- core palette ------------------------------------------------- */
+  --bg:#151412;
+  --ink:#f3efe9;
+  --muted:#a89d92;
+  /* Section headings sit between --muted and --ink here too, but the contrast
+     runs the other way on a dark ground: lighter than body-adjacent text. */
+  --heading:#e8e2da;
+  --line:rgba(243,239,233,.14);
+  --card:#1e1c1a;
+
+  /* Coral, pink, violet, blue and amber all hold up on a dark ground.
+     Green and red are the exceptions: the light values are too dark to read
+     as a status colour against a dark card. */
+  --green:#8fc23f;
+  --red:#f07070;
+  /* File-format icons lift separately from status colours on dark surfaces. */
+  --file-excel:#33c481;
+  --file-json:#f5a623;
+  /* Code surfaces. Dark+ token colours; the diff colours are the existing
+     values, so the evening view is exactly what it was before. */
+  --code-bg:#141312;
+  --code-fg:#d4d4d4;
+  --code-gutter:#6f6a63;
+  --code-comment:#6a9955;
+  --code-string:#ce9178;
+  --code-macro:#569cd6;
+  --code-key:#9cdcfe;
+  --code-number:#b5cea8;
+  --code-const:#569cd6;
+  --code-add:#a7d977;
+  --code-del:#f7a3a3;
+  --code-hunk:#94c3f0;
+  --code-meta:#8b837a;
+
+  /* Dark supporting surfaces lift slightly on the dark page so they remain
+     distinguishable from the card background. */
+  --dark:#232120;
+  --dark-2:#2b2927;
+
+  /* Tints become translucent washes rather than pale solids, so they read as
+     a tinted panel instead of a light patch. */
+  --tint-coral:rgba(255,122,89,.16);
+  --tint-pink:rgba(255,77,141,.16);
+  --tint-violet:rgba(139,92,246,.22);
+  --tint-blue:rgba(55,138,221,.18);
+  --tint-green:rgba(99,153,34,.22);
+  --tint-amber:rgba(245,166,35,.18);
+  --tint-red:rgba(214,69,69,.18);
+  --diff-delete-bg:rgba(255,77,141,.18);
+  --diff-change-bg:rgba(245,166,35,.2);
+
+  /* Selection: a violet fill reads against both the dark card behind it and
+     the white glyph on top of it. The near-black fill it replaces cleared
+     neither. */
+  --sel-bg:#8b5cf6;
+  --sel-fg:#ffffff;
+  --sel-ring:#a78bfa;
+  --seg-on-bg:#332f2b;
+  --seg-on-ring:#a78bfa;
+
+  --surface-2:#262320;
+  --surface-3:#1b1917;
+  --edge:rgba(243,239,233,.34);
+  --edge-hover:rgba(243,239,233,.3);
+  --shadow-1:rgba(0,0,0,.45);
+  --shadow-2:rgba(0,0,0,.5);
+  --shadow-3:rgba(0,0,0,.6);
+  --veil:rgba(21,20,18,.97);
+  --veil-nav:rgba(21,20,18,.86);
+
+  /* Inverted so the "strong" button still reads as the emphatic one. */
+  --btn-dark-bg:#ffffff;
+  --btn-dark-fg:#111111;
+
+  /* ---- editor tokens ------------------------------------------------ */
+  /* The grid needs its three surfaces to stay distinguishable when they are
+     all dark. Header, zebra stripe and hover are each a small step apart
+     rather than the wide steps the light theme can afford. */
+  --grid-head:#262320;
+  --grid-zebra:#211f1c;
+  --grid-hover:#2a2724;
+  --grid-selected:rgba(139,92,246,.22);
+  --grid-line:rgba(243,239,233,.1);
+  --cell-focus:#a78bfa;
+}
+
+/* ===========================================================================
+ * Component-level answers
+ * ========================================================================= */
+
+[data-theme="dark"] nav{background:rgba(21,20,18,.86)}
+
+/* Status text colours: the light values are all far too dark to read once
+   their background becomes a translucent tint. */
+[data-theme="dark"] .pill-ok,
+[data-theme="dark"] .ctx-badge.ok,
+[data-theme="dark"] .save-state.clean{color:#b7dc7c;
+  border-color:rgba(143,194,63,.4)}
+[data-theme="dark"] .pill-warning,
+[data-theme="dark"] .ctx-badge.warning,
+[data-theme="dark"] .save-state.dirty{color:#f0c06a;
+  border-color:rgba(245,166,35,.4)}
+[data-theme="dark"] .pill-error,
+[data-theme="dark"] .ctx-badge.error{color:#f7a3a3;
+  border-color:rgba(214,69,69,.42)}
+[data-theme="dark"] .save-state.offline{color:#94c3f0;
+  border-color:rgba(55,138,221,.4)}
+[data-theme="dark"] .version-chip{color:#c9b6f9}
+
+/* Import review. The tints below are already theme-aware; these are the inks
+   that sit on them, which the light palette sets dark enough to disappear. */
+[data-theme="dark"] .import-finding-block.is-error{
+  border-color:rgba(214,69,69,.42)}
+[data-theme="dark"] .import-finding-block.is-error .import-finding-head{
+  color:#f7a3a3}
+[data-theme="dark"] .import-finding-block.is-warning{
+  border-color:rgba(245,166,35,.4)}
+[data-theme="dark"] .import-finding-block.is-warning .import-finding-head{
+  color:#f0c06a}
+[data-theme="dark"] .import-change-mark.is-add{color:#b7dc7c}
+[data-theme="dark"] .import-change-mark.is-del{color:#f7a3a3}
+[data-theme="dark"] .import-change-mark.is-edit{color:#94c3f0}
+[data-theme="dark"] .import-stats li.is-error .import-stat-value{color:#f7a3a3}
+[data-theme="dark"] .import-stats li.is-warn .import-stat-value{color:#f0c06a}
+[data-theme="dark"] .line-issue{color:#f7a3a3}
+[data-theme="dark"] .version-stats .added{color:#b7dc7c}
+[data-theme="dark"] .version-stats .removed{color:#f7a3a3}
+[data-theme="dark"] .field .msg.err,
+[data-theme="dark"] .strip-status.err,
+[data-theme="dark"] .history-detail .detail-note.err{color:#f7a3bd}
+[data-theme="dark"] .field .msg.warn,
+[data-theme="dark"] .strip-status.warn{color:#f0c06a}
+
+/* The banner and the save dialog's change list both carry a tinted background
+   with dark text baked in. */
+[data-theme="dark"] .banner{color:#94c3f0;border-color:rgba(55,138,221,.3)}
+[data-theme="dark"] .banner-mark{background:var(--card);
+  border-color:rgba(55,138,221,.4)}
+[data-theme="dark"] .banner-warn{color:#f0c06a;
+  border-bottom-color:rgba(245,166,35,.4)}
+[data-theme="dark"] .banner-warn .banner-mark{border-color:rgba(245,166,35,.45)}
+[data-theme="dark"] .banner-ok{color:#b7dc7c;
+  border-bottom-color:rgba(143,194,63,.4)}
+[data-theme="dark"] .banner-ok .banner-mark{border-color:rgba(143,194,63,.45)}
+[data-theme="dark"] .change-line.add{color:#b7dc7c}
+[data-theme="dark"] .change-line.del{color:#f7a3a3}
+[data-theme="dark"] .change-line.edit{color:#94c3f0}
+[data-theme="dark"] .dialog-warn{color:#f0c06a;border-color:rgba(245,166,35,.4)}
+
+/* Form surfaces: the browser default for an input is white in both themes.
+ *
+ * background-color, never the `background` shorthand. The shorthand resets
+ * every background longhand it does not mention, including background-repeat
+ * and background-position — which the base stylesheet uses to pin the select
+ * chevrons to `no-repeat right 10px center`. Reset those and the chevron SVG
+ * tiles across the whole control as a herringbone pattern, in dark mode only.
+ * That is what was wrong with the group-by dropdown. */
+[data-theme="dark"] .field input,
+[data-theme="dark"] .field select,
+[data-theme="dark"] .field textarea,
+[data-theme="dark"] .mini-search,
+[data-theme="dark"] .rail-search,
+[data-theme="dark"] .nav-select,
+[data-theme="dark"] .mini-select{background-color:var(--surface-3);color:var(--ink)}
+[data-theme="dark"] .field input:focus,
+[data-theme="dark"] .field select:focus,
+[data-theme="dark"] .field textarea:focus{background-color:var(--card)}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder{color:var(--muted)}
+
+/* The chevrons in the select backgrounds are data URLs with a baked-in stroke
+   colour, so they have to be redrawn rather than re-tokenised. */
+[data-theme="dark"] .nav-select:disabled{background-color:var(--surface-2);
+  background-image:none;color:var(--muted)}
+[data-theme="dark"] .nav-select,
+[data-theme="dark"] .mini-select{
+  background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a89d92' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")}
+[data-theme="dark"] .row-grid select{
+  background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%23a89d92' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")}
+
+/* Group-by dropdown: keep native select and option shell readable in dark mode.
+ *
+ * The rules above style the closed control, which is a normal element. The
+ * open pull-down is not: it is drawn by the platform, and it takes its colours
+ * from color-scheme plus whatever the option rows carry, not from the select's
+ * own background. Without these, the list body can come back light-on-light
+ * even though the closed control is correct. */
+[data-theme="dark"] #groupBy.mini-select {
+  background-color: var(--surface-3);
+  color: var(--ink);
+  border-color: var(--line);
+  color-scheme: dark;
+}
+
+[data-theme="dark"] #groupBy.mini-select option {
+  background-color: var(--surface-3);
+  color: var(--ink);
+}
+
+[data-theme="dark"] #groupBy.mini-select:hover {
+  background-color: var(--surface-2);
+}
+
+[data-theme="dark"] #groupBy.mini-select:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+
+/* Deep drop shadows are invisible on a dark ground; these go to black. */
+[data-theme="dark"] .menu{box-shadow:0 18px 40px rgba(0,0,0,.5)}
+[data-theme="dark"] .dialog{box-shadow:0 30px 80px rgba(0,0,0,.62)}
+[data-theme="dark"] .dialog::backdrop{background:rgba(0,0,0,.62)}
+[data-theme="dark"] .nav-rail{box-shadow:0 18px 50px rgba(0,0,0,.5)}
+[data-theme="dark"] .toast{box-shadow:0 14px 38px rgba(0,0,0,.6)}
+
+[data-theme="dark"] .toast{background:#2b2927;color:var(--ink)}
+[data-theme="dark"] .toast.err{background:#5c2b2b;color:#ffd9d9}
+
+/* Buttons: ghost buttons stay on the dark surface, while the inverted
+   `.btn-dark` family behaves like a physical white application button. */
+[data-theme="dark"] .btn:not(.btn-dark):hover{background:var(--surface-2)}
+[data-theme="dark"] .btn-dark{
+  background:#ffffff;color:#111111;border:1px solid #d0d0d0;
+  box-shadow:0 2px 8px rgba(0,0,0,.28);opacity:1;
+}
+[data-theme="dark"] .btn-dark:hover{
+  background:#f2f2f2;color:#111111;border-color:#d8d8d8;
+  box-shadow:0 6px 16px rgba(0,0,0,.38);transform:translateY(-1px);
+  opacity:1;
+}
+[data-theme="dark"] .btn-dark:active{
+  background:#e0e0e0;color:#111111;border-color:#c4c4c4;
+  box-shadow:0 1px 4px rgba(0,0,0,.24);transform:translateY(0);
+  opacity:1;
+}
+[data-theme="dark"] .btn-dark:focus,
+[data-theme="dark"] .btn-dark:focus-visible{
+  outline:3px solid #a78bfa;outline-offset:3px;
+}
+[data-theme="dark"] .btn-dark:disabled{
+  background:#ffffff;color:#111111;border-color:#d0d0d0;
+  box-shadow:none;opacity:.45;transform:none;
+}
+[data-theme="dark"] .btn-danger{color:#f7a3a3;border-color:rgba(214,69,69,.4)}
+[data-theme="dark"] .btn-danger:hover{background:rgba(214,69,69,.18)}
+[data-theme="dark"] .version-actions .primary{color:#c9b6f9;
+  border-color:rgba(139,92,246,.5)}
+
+/* Panels whose pale fill was a light-mode literal. */
+[data-theme="dark"] .shell-preview tr.label-row td{background:var(--surface-2)}
+[data-theme="dark"] .history-empty .hint-cmd{background:var(--surface-2)}
+[data-theme="dark"] .fgroup-head:hover,
+[data-theme="dark"] .version-head:hover{background:var(--surface-2)}

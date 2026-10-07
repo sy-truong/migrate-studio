@@ -1,0 +1,6 @@
+Synthetic sample fixtures for Migrate Studio.
+
+Copyright (c) 2026 Meta-Xceed, Inc.
+SPDX-License-Identifier: Apache-2.0
+
+Individual SAS fixture files intentionally omit per-file headers so parser and line-position tests stay stable.

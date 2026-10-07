@@ -1,0 +1,10 @@
+Package: migratestudio
+Title: SAS Program Migration Studio
+Version: 0.3.0
+Authors@R: person("Migrate Studio", "Contributors", role = c("aut", "cre"))
+Description: Local Shiny application for reviewing and applying example SAS migration rules.
+License: Apache License (== 2.0)
+Encoding: UTF-8
+Depends: R (>= 4.2.3)
+Imports: shiny (>= 1.12.1), htmltools (>= 0.5.8.1), httpuv (>= 1.6.15), jsonlite (>= 1.8.9), digest (>= 0.6.37)
+Suggests: readxl (>= 1.4.3), reticulate (>= 1.40.0), testthat (>= 3.2.3)

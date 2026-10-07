@@ -1,0 +1,1502 @@
+{
+  "schema_version": "1.0",
+  "generated": "2026-09-06",
+  "source": {
+    "macro_name": "MIGRATION_CHECK",
+    "file": "migration_check.sas",
+    "macro_version": "4.30",
+    "purpose": "Scan SAS programs for Windows/source platform to Linux/target platform migration issues and optionally auto-update them.",
+    "note_on_regex": "All patterns below are given in Perl syntax as used by SAS PRXPARSE/PRXMATCH and are directly usable with Python 're'. Flag 'i' means re.IGNORECASE. Where SAS used INDEX() (case-sensitive substring) or UPCASE()+INDEX(), that is stated explicitly per rule."
+  },
+  "parameters": [
+    {
+      "name": "MC_PGMPATH",
+      "required": true,
+      "description": "Root folder containing *.sas programs. Exact crawl root; all descendant subfolders are scanned recursively. Parent folders are never crawled.",
+      "validation": "Must be non-blank and openable as a directory."
+    },
+    {
+      "name": "MC_OUTSUM",
+      "required": true,
+      "description": "Full path and file name of the output Excel workbook.",
+      "validation": "Must be non-blank, must match /\\.xlsx$/i, parent directory must exist and be writable/unlocked."
+    },
+    {
+      "name": "MC_UPDATE",
+      "required": false,
+      "default": "N",
+      "allowed": [
+        "N",
+        "No",
+        "Y",
+        "Yes"
+      ],
+      "normalization": "UPCASE; Y/YES -> 'Y'; N/NO/blank -> 'N'; anything else -> warning + 'N'.",
+      "description": "When Y: create an 'archive' subfolder beside each source program, write a dated backup (e.g. archive/ae_20260813.sas) preserving the original last-modified timestamp, then update the original program in place. Same-day backups are preserved with _2, _3 suffixes. If the program's immediate folder name already contains 'archive' (any case), the program is scan-only and is never updated."
+    },
+    {
+      "name": "MC_LOGLEVEL",
+      "required": false,
+      "default": "PROGRAM",
+      "allowed": [
+        "PROGRAM",
+        "RULE",
+        "NONE"
+      ],
+      "normalization": "UPCASE; invalid -> note + 'PROGRAM'.",
+      "description": "PROGRAM = one progress line per scanned program. RULE = adds ~30 rule-status lines per program. NONE = suppress staged progress."
+    },
+    {
+      "name": "TOC_FILENAMES",
+      "required": false,
+      "default": [
+        "study_toc.xlsx",
+        "toc.xlsx"
+      ],
+      "description": "Space-separated or JSON-list of configurable TOC workbook filenames used by Rule F1."
+    }
+  ],
+  "environment": {
+    "os_detection": {
+      "source": "SYSSCP (upcased)",
+      "mapping": [
+        {
+          "contains": "WIN",
+          "os_family": "WINDOWS"
+        },
+        {
+          "contains": "LIN",
+          "os_family": "LINUX"
+        },
+        {
+          "else": true,
+          "os_family": "OTHER"
+        }
+      ],
+      "python_equivalent": "platform.system() -> 'Windows'/'Linux'/other"
+    },
+    "path_separator": {
+      "logic": "If MC_PGMPATH ends with '/' or '\\\\', separator = ''; else if it contains '\\\\', separator = '\\\\'; else '/'."
+    },
+    "update_target_mode": "ARCHIVE_BACKUP then IN_PLACE (identical on all hosts as of v4.30)."
+  },
+  "file_discovery": {
+    "crawl_root": "MC_PGMPATH exactly (no parent traversal).",
+    "recursive": true,
+    "os_command": {
+      "WINDOWS": "dir \"<root>\" /s /b /a-d",
+      "OTHER": "find \"<root>\" -type f"
+    },
+    "python_equivalent": "os.walk(MC_PGMPATH) collecting files only.",
+    "normalization_for_matching": "lowcase(translate(path,'/','\\\\')) — lowercase and backslashes converted to forward slashes. Original path is preserved for reporting and file access.",
+    "exclusions": [
+      "Any path whose normalized form contains '/migrate_output/' is dropped (generated output from prior runs)."
+    ],
+    "derived_datasets": {
+      "MC_PGMLIST": "Files under MC_PGMPATH with extension 'sas' (lowercased last dot segment). Deduplicated by full path. This is the program scan list.",
+      "MC_TOC_CASEMAP": "Map of lowercased configured TOC filename to the physical filename found under the scan root. The first match by sorted actual_path wins and supplies the casing used by Rule F1.",
+      "MC_PGM_RULE_BASE": "Per-program derived keys used by F5/F6 (see purpose_derivation)."
+    },
+    "purpose_derivation": {
+      "description": "Used by Rules F5 and F6.",
+      "steps": [
+        "pgm_path_norm = path with '\\\\' -> '/'.",
+        "pgm_path_with_lead = '/' + pgm_path_norm.",
+        "parent_path = pgm_path_norm with trailing '/<name>' removed.",
+        "pgm_stem = filename with trailing '.sas' removed (case-insensitive).",
+        "Locate the segment '/stat/' (case-insensitive) in pgm_path_with_lead.",
+        "If found: path_after_stat = text after '/stat/'; purpose = first '/'-segment of it; purpose_src = 'STAT'; folder_path_for_f6 = path_after_stat minus its last '/<name>'.",
+        "If not found: folder_path_for_f6 = parent_path. If pgm_path_norm starts (case-insensitive) with MC_PGMPATH normalized (trailing slashes stripped), take the relative path; if it has more than one '/'-segment, purpose = its first segment, else purpose = ''. Otherwise purpose = last segment of parent_path. purpose_src = 'FOLDER' when purpose non-blank, else 'NONE'.",
+        "All *_key variables are lowercased.",
+        "STAT-derived and FOLDER-derived purposes are evaluated separately and never grouped together. purpose_src='NONE' programs are excluded from F5."
+      ]
+    }
+  },
+  "per_program_processing": {
+    "read": "Read the whole source file once into a line list (line_num starts at 1). All rules operate on that in-memory copy.",
+    "whole_program_flags": [
+      {
+        "name": "has_validvarname_v7",
+        "pattern": "/\\bvalidvarname\\s*=\\s*v7\\b/i",
+        "scope": "true if ANY line matches"
+      },
+      {
+        "name": "has_chmod",
+        "pattern": "/\\bchmod\\b/i",
+        "scope": "true if ANY line matches",
+        "used_by": [
+          "D2"
+        ]
+      },
+      {
+        "name": "has_setup_call",
+        "computed_only_on": "LINUX",
+        "logic": "For each line: strip inline block comments with s#/\\*.*?\\*/##g, then if the result does NOT match /^\\s*\\*/ AND matches /%setup\\b\\s*(\\(|;)/i, set flag true.",
+        "used_by": [
+          "O4"
+        ]
+      }
+    ],
+    "line_context": {
+      "prev_line": "line n-1 (blank for n=1)",
+      "prev_line2": "line n-2",
+      "prev_line3": "line n-3",
+      "next_line1": "line n+1",
+      "next_line2": "line n+2",
+      "line_up": "upcase(line_text), precomputed once per line"
+    }
+  },
+  "shared_helpers": {
+    "win_exemption": {
+      "id": "WIN_EXEMPT",
+      "applies_to": [
+        "F3",
+        "O1",
+        "L1"
+      ],
+      "applies_to_update_mode_too": [
+        "F3",
+        "O1"
+      ],
+      "logic": "True when UPCASE of prev_line, prev_line2, or prev_line3 contains the literal '\"WIN\"' or the literal \"'WIN'\". When true the candidate finding is treated as PASSED: no finding is reported and no update is applied.",
+      "python": "any('\"WIN\"' in p.upper() or \"'WIN'\" in p.upper() for p in (prev1, prev2, prev3))"
+    },
+    "s5_classify": {
+      "id": "MC_S5_CLASSIFY",
+      "used_by": [
+        "S5 detection",
+        "S5 update"
+      ],
+      "contract": "Returns 'PATH' (fail/finding) or '' (pass). Detection and update MUST use the identical result so the workbook and the updated program cannot disagree.",
+      "ordered_logic": [
+        {
+          "step": 1,
+          "test": "'\\\\' not in line",
+          "result": "PASS",
+          "note": "fast path: every configured indicator contains a backslash"
+        },
+        {
+          "step": 2,
+          "test": "line matches /^\\s*\\/\\*/",
+          "result": "PASS",
+          "note": "line starts with a block-comment opener"
+        },
+        {
+          "step": 3,
+          "test": "'PRXCHANGE' in line_up",
+          "result": "PASS",
+          "note": "PRXCHANGE is cross-platform SAS logic; any case"
+        },
+        {
+          "step": 4,
+          "test": "line_up contains any of 'C:\\\\','D:\\\\','E:\\\\','F:\\\\','G:\\\\','H:\\\\'  OR  line contains '\\\\\\\\'  OR  line contains '..\\\\'  OR  line contains '.\\\\'",
+          "result": "PATH"
+        },
+        {
+          "step": 5,
+          "test": "otherwise",
+          "result": "PASS"
+        }
+      ],
+      "notes": "Drive-letter tests are done on the uppercased line; the '\\\\\\\\', '..\\\\' and '.\\\\' tests are done on the raw line. All other backslash usage (RTF control words, FORMCHAR, ESCAPECHAR, etc.) passes."
+    }
+  },
+  "mc_update_applicability": {
+    "question_answered": "Which rules actually change source code when MC_UPDATE=Y, and which are report-only?",
+    "summary": "12 rules have update logic. 11 are active; F4's update logic exists but is compiled out by the mc_rule_f4_enabled=N toggle. The remaining 14 rules are detection/report-only and never modify a program.",
+    "applied_when_update_y": [
+      {
+        "rule_id": "F1",
+        "rule_name": "TOC Casing",
+        "change_type": "in_line_replace",
+        "one_line": "Rewrites configured TOC workbook filenames to the physical file's casing."
+      },
+      {
+        "rule_id": "F2",
+        "rule_name": "Folder Name Casing",
+        "change_type": "in_line_replace",
+        "one_line": "Rewrites folder segments to the casing of the exact physical parent directory."
+      },
+      {
+        "rule_id": "F3",
+        "rule_name": "X command related OPTIONS",
+        "change_type": "comment_out_line",
+        "one_line": "Prefixes the OPTIONS line with '*** remove for linux *** '.",
+        "gated_by": "WIN_EXEMPT"
+      },
+      {
+        "rule_id": "O1",
+        "rule_name": "DOS cd command",
+        "change_type": "comment_out_plus_insert_before",
+        "one_line": "Comments the X/SYSTASK CD line and inserts a dlgcdir() block above it.",
+        "gated_by": "WIN_EXEMPT"
+      },
+      {
+        "rule_id": "O2",
+        "rule_name": "Obtain User ID",
+        "change_type": "in_line_replace",
+        "one_line": "%sysget(USERNAME) -> %sysget(USER)."
+      },
+      {
+        "rule_id": "O3",
+        "rule_name": "Remove filenames",
+        "change_type": "insert_before_and_after",
+        "one_line": "Wraps FILENAME _ALL_; with _GSFNAME save/restore blocks; the original line is unchanged."
+      },
+      {
+        "rule_id": "O5",
+        "rule_name": "Importing Excel",
+        "change_type": "insert_before",
+        "one_line": "Inserts 'options validvarname=v7;' above the Excel PROC IMPORT; the original line is unchanged."
+      },
+      {
+        "rule_id": "O6",
+        "rule_name": "Copying files",
+        "change_type": "comment_out_plus_insert_after",
+        "one_line": "Comments the X COPY line and inserts FILENAME/FCOPY replacement logic below it."
+      },
+      {
+        "rule_id": "L3",
+        "rule_name": "Delete files",
+        "change_type": "in_line_replace_plus_comment_prefix",
+        "one_line": "DEL -> rm -f inside the X/SYSTASK command, then prefixes the line with a change comment."
+      },
+      {
+        "rule_id": "S1",
+        "rule_name": "Current program name",
+        "change_type": "in_line_replace",
+        "one_line": "&_SASPROGRAMFILE -> %sysget(SAS_EXECFILEPATH)."
+      },
+      {
+        "rule_id": "S5",
+        "rule_name": "Windows path backslash",
+        "change_type": "in_line_replace",
+        "one_line": "Converts every backslash on the line to a forward slash, but only when MC_S5_CLASSIFY returns 'PATH'."
+      },
+      {
+        "rule_id": "F4",
+        "rule_name": "More 7 levels Folder",
+        "change_type": "comment_out_line",
+        "one_line": "Comments lines with more than seven backslashes.",
+        "active": false,
+        "note": "Update logic is present in the source but compiled out by mc_rule_f4_enabled=N. Not applied unless the toggle is set to Y."
+      }
+    ],
+    "report_only_never_modified": [
+      {
+        "rule_id": "F5",
+        "reason": "Inventory-level duplicate detection; a fix means deleting or relocating programs, which the macro will not do."
+      },
+      {
+        "rule_id": "F6",
+        "reason": "Inventory-level archive/backup identification; requires human judgement (F6B emits LOW/MEDIUM confidence findings)."
+      },
+      {
+        "rule_id": "O4",
+        "reason": "Program-level; the macro cannot know which %setup invocation and arguments the program needs."
+      },
+      {
+        "rule_id": "S2",
+        "reason": "PROC APPEND to an Excel libname needs a workflow redesign, not a text substitution."
+      },
+      {
+        "rule_id": "S3",
+        "reason": "Excel LIBNAME / PROC EXPORT / PROC IMPORT DBMS=EXCEL need a workflow redesign."
+      },
+      {
+        "rule_id": "S4",
+        "reason": "Log-parsing position change; the correct fix depends on the surrounding parsing logic."
+      },
+      {
+        "rule_id": "S7",
+        "reason": "Environment-level macro comparison; reports differences between purpose and global autocall macros for review."
+      },
+      {
+        "rule_id": "D1",
+        "reason": ".bat references need equivalent shell-script logic written by hand."
+      },
+      {
+        "rule_id": "D2",
+        "reason": "Where to place the chmod call cannot be inferred safely."
+      },
+      {
+        "rule_id": "D3",
+        "reason": "Curly quotes are flagged; replacement is left to review because the character may be intentional data."
+      },
+      {
+        "rule_id": "C1",
+        "reason": "source-platform folder references need a mapping decision per study."
+      },
+      {
+        "rule_id": "C2",
+        "reason": "SASUSER writes need a target library decision."
+      },
+      {
+        "rule_id": "L1",
+        "reason": "Standard librefs need new physical paths supplied by the migration team."
+      },
+      {
+        "rule_id": "L2",
+        "reason": "FILENAME PIPE command syntax must be rewritten per command."
+      },
+      {
+        "rule_id": "L4",
+        "reason": "Encoding-sensitive characters are reported with position and hex value for manual review."
+      },
+      {
+        "rule_id": "S6",
+        "reason": "Retired 2026-05-01; no detection and no update."
+      }
+    ],
+    "preconditions_for_any_update": [
+      "MC_UPDATE resolves to 'Y' (Y or Yes, case-insensitive).",
+      "The program's immediate folder name does NOT contain 'archive' in any case — such programs stay scan-only.",
+      "The source folder is resolvable from the program path.",
+      "A timestamp-preserving dated backup under the sibling 'archive' folder was created AND passed post-copy validation (exists, nonzero size, byte count matches, Last Modified matches). Only then is the original updated in place."
+    ],
+    "cross_reference": "Each rule object below carries the same fact in its own 'update' member: update.supported = true means the rule participates in MC_UPDATE=Y."
+  },
+  "rule_categories": [
+    "File & Folder Structure",
+    "OS Commands & Shell",
+    "SAS Environment & Setup",
+    "Data Import & Export",
+    "Character Encoding & Special Characters",
+    "Library & Path References"
+  ],
+  "finding_record": {
+    "fields": [
+      "category",
+      "rule_id",
+      "rule_name",
+      "rule_desc",
+      "criteria",
+      "pgm_name",
+      "pgm_path",
+      "line_num",
+      "line_text",
+      "s7_macro_name",
+      "s7_purpose_macro_path",
+      "s7_global_macro_path",
+      "s7_purpose_line_text",
+      "s7_global_line_text"
+    ],
+    "line_num_convention": "Physical source line number for line-level rules; 0 for program-level and inventory-level rules (F5, F6, O4).",
+    "multiplicity": "A single source line can produce multiple findings (rules are evaluated independently, not else-if chained — except the S3 branches, which are mutually exclusive)."
+  },
+  "rules": [
+    {
+      "rule_id": "F1",
+      "rule_name": "TOC Casing",
+      "category": "File & Folder Structure",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "TOC_CASE",
+      "description": "Configured TOC workbook filename casing referenced in code does not match the physical file: <actual_name>.",
+      "detection": {
+        "method": "global_regex_scan",
+        "pattern": "/(<configured TOC filenames joined with | and regex-escaped>)/i",
+        "per_match_logic": [
+          "matched_ref = the exact matched text from the source line",
+          "expected = physical actual_name from MC_TOC_CASEMAP for the lowercased matched configured filename",
+          "If expected is non-blank AND strip(matched_ref) != strip(expected) -> finding"
+        ],
+        "note": "Comparison is exact (case-sensitive) string inequality. Every match on the line is evaluated, so one line can yield multiple F1 findings."
+      },
+      "criteria_template": "Referenced=[<matched_ref>] Physical file=[<expected>]",
+      "update": {
+        "supported": true,
+        "applied_when_mc_update_y": true,
+        "action": "regex_replace_all",
+        "order": "Runs FIRST in the update step, before F2, so later folder-casing work sees the corrected filename.",
+        "branches": [
+          {
+            "precondition": "physical actual_name is non-blank AND a configured TOC filename matches the line",
+            "pattern": "s/<configured TOC filename>/<physical_actual_name>/i (global)",
+            "update_desc": "Corrected configured TOC workbook filename casing to match physical file: <actual_name>."
+          }
+        ],
+        "guard": "An update record is emitted only when the line text actually changed.",
+        "note": "Physical names come from MC_TOC_CASEMAP, discovered recursively within MC_PGMPATH and its descendants. Only configured names are considered."
+      }
+    },
+    {
+      "rule_id": "F2",
+      "rule_name": "Folder Name Casing",
+      "category": "File & Folder Structure",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "FOLDER_CASE",
+      "description": "A folder path segment referenced in the SAS program does not match the casing returned by its exact physical parent directory.",
+      "detection": {
+        "method": "segment_scan_with_physical_verification",
+        "line_skip_pattern": "/^\\s*(%?\\*|\\/\\*)/  -> skip SAS comment lines entirely",
+        "segment_pattern": "/[\\\\\\/]([^\\\\\\/\"'\\s;,()]+)/",
+        "per_segment_logic": [
+          "ref = capture group 1 (the segment name). Skip when blank or equal to '.' or '..'.",
+          "prefix = the part of the line before the matched separator.",
+          "Find the LAST double quote and LAST single quote in prefix; qpos = max of the two.",
+          "If qpos > 0: token_prefix = prefix after qpos.",
+          "Else: find the LAST occurrence of any of the characters ' =,();' in prefix; if found, token_prefix = prefix after it; else token_prefix = prefix.",
+          "token_prefix = strip(token_prefix).",
+          "Parent resolution: if token_prefix matches /^[A-Za-z]:/ OR starts with '\\\\\\\\' OR starts with '/', parent = token_prefix (absolute Windows / UNC / POSIX).",
+          "Else if token_prefix is non-blank and contains neither '&' nor '%': parent = <directory of the source program> + separator + token_prefix (relative path resolved against the program folder).",
+          "Else parent stays blank (unresolved macro reference — never guessed).",
+          "If parent matches /^[A-Za-z]:$/ append '\\\\' (drive root).",
+          "Skip if parent blank or contains '&' or '%'.",
+          "Physical lookup (cached per program on key (parent, lowercase ref)): open parent directory and read entries; if an entry equals ref case-insensitively, actual = that entry's real name.",
+          "Verification: child = parent + separator + actual must itself open as a directory; only then verified = 1.",
+          "Finding when verified = 1 AND strip(ref) != strip(actual)."
+        ],
+        "notes": [
+          "Casing is ALWAYS verified against the live file system (directory listing), never against the crawl output or the casing supplied in MC_PGMPATH.",
+          "Global folder-name-only lookup was deliberately removed: casing from an unrelated same-named folder elsewhere in the tree must not be applied.",
+          "If the physical parent cannot be resolved, F2 does not guess and does not modify the source text.",
+          "Folder keys found with more than one physical casing under the scan root are treated as ambiguous and excluded.",
+          "Directory lookups are memoized per program for performance."
+        ]
+      },
+      "criteria_template": "Referenced=[<ref>] Physical=[<actual>] Parent=[<parent>]  (multiple segments joined with ' | ', truncated to 500 chars)",
+      "update": {
+        "supported": true,
+        "action": "Substitute the physical casing into the line at the matched position, then restart the segment scan from position 1 so later segments are validated against the corrected parent path.",
+        "update_desc": "Corrected folder reference from <ref> to <actual> using physical parent <parent>",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "F3",
+      "rule_name": "X command related OPTIONS",
+      "category": "File & Folder Structure",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "OPTIONS_XCMD",
+      "description": "OPTIONS statement specifying X-command related options (XSYNC, NOXSYNC, XWAIT, NOXWAIT, XCMD, NOXCMD) that must be reviewed for Linux/target platform.",
+      "detection": {
+        "method": "compound",
+        "preconditions": [
+          "WIN_EXEMPT is false"
+        ],
+        "conditions": [
+          {
+            "pattern": "/\\boptions\\b/i",
+            "must_match": true
+          },
+          {
+            "pattern": "/\\b(noxsync|xsync|noxwait|xwait|noxcmd|xcmd)\\b/i",
+            "must_match": true,
+            "collect_all_matches": true
+          }
+        ],
+        "note": "All option-keyword matches on the line are collected (SAS uses PRXNEXT to iterate) and listed in criteria."
+      },
+      "criteria_template": "Option=[<match1>] | Option=[<match2>] ...",
+      "update": {
+        "supported": true,
+        "action": "comment_out_line",
+        "prefix": "*** remove for linux *** ",
+        "idempotency_guard": "/^\\s*\\*\\*\\*\\s*remove for linux\\s*\\*\\*\\*/i must NOT already match",
+        "win_exemption_applies": true,
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "F4",
+      "rule_name": "More 7 levels Folder",
+      "category": "File & Folder Structure",
+      "scope": "line",
+      "enabled": false,
+      "retired_date": "2026-08-02",
+      "toggle": "mc_rule_f4_enabled = N (set to Y to restore definition, detection, and update logic)",
+      "retire_reason": "The target target platform/Linux server supports folder structures deeper than seven levels.",
+      "os_scope": "ALL",
+      "special_rule": "DIR_DEPTH",
+      "description": "Referenced folder path exceeds 7 folder levels (SAS Studio display issues).",
+      "detection": {
+        "method": "global_regex_scan",
+        "path_pattern": "/((?:[A-Za-z]:|\\\\\\\\)?[^\"'\\s;,()]*\\\\[^\"'\\s;,()]*)/",
+        "per_match_logic": [
+          "path_ref = match, then strip trailing [\\\\/.,:]+",
+          "Only continue when path_ref contains '\\\\'.",
+          "folder_ref = path_ref up to (not including) its LAST backslash; if the last backslash is at position 1, folder_ref = ''.",
+          "depth = number of '\\\\'-delimited words in folder_ref.",
+          "If folder_ref matches /^[A-Za-z]:\\\\/, depth = depth - 1 (do not count the drive segment).",
+          "Else if folder_ref starts with '\\\\\\\\', depth = max(0, depth - 2) (do not count server/share).",
+          "Finding when depth > 7."
+        ]
+      },
+      "criteria_template": "REFERENCED DIRECTORY LEVELS > 7; levels=<depth>",
+      "update": {
+        "supported": true,
+        "enabled": false,
+        "action": "comment_out_line when the line contains more than seven backslashes and is not RTF/FORMCHAR markup",
+        "prefix": "*** update path for linux *** ",
+        "applied_when_mc_update_y": false,
+        "note": "Update logic exists in the source but is compiled out by mc_rule_f4_enabled=N. Set the toggle to Y to restore it."
+      }
+    },
+    {
+      "rule_id": "F5",
+      "rule_name": "Duplicate Programs by Purpose",
+      "category": "File & Folder Structure",
+      "scope": "inventory",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "DUPLICATE_PROGRAM_BY_PURPOSE",
+      "added": "2026-07-24",
+      "description": "Identifies SAS programs with the same case-insensitive filename in multiple locations within the same purpose. Purpose is the folder immediately below the 'stat' folder, or the folder immediately below MC_PGMPATH when no stat folder is present. STAT-derived and folder-derived purposes are evaluated separately.",
+      "detection": {
+        "method": "group_by_count",
+        "input": "MC_PGM_RULE_BASE (see file_discovery.purpose_derivation)",
+        "logic": [
+          "Exclude rows where purpose_key or pgm_name_key is missing.",
+          "GROUP BY (purpose_src, purpose_key, pgm_name_key) HAVING count(*) > 1.",
+          "Emit one finding per program row belonging to a duplicated group.",
+          "Ordering: purpose, pgm_name, pgm_path."
+        ]
+      },
+      "line_num": 0,
+      "criteria_template": "Purpose=[<purpose>] Source=[<purpose_src>] Program=[<pgm_name>] Matching files=<duplicate_count>",
+      "line_text_template": "Program-level check: duplicate program filename found within purpose <purpose>. Full path: <pgm_path>",
+      "diagnostics": [
+        "Warn when no /stat/ segment exists anywhere and purposes came from the folder fallback.",
+        "Warn with a count when programs have purpose_src='NONE' and were excluded."
+      ],
+      "update": {
+        "supported": false,
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "F6",
+      "rule_name": "Archive or Backup Programs",
+      "category": "File & Folder Structure",
+      "scope": "inventory",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "ARCHIVE_BACKUP_PROGRAM",
+      "added": "2026-07-24",
+      "description": "Identifies SAS programs that appear to be archive, backup, or alternate copies, based on an archive or date-named folder, or a same-folder filename that differs only by an appended number or one- or two-letter initials.",
+      "sub_rules": [
+        {
+          "id": "F6A",
+          "name": "Archive/date-named folder",
+          "logic": [
+            "Iterate the '/'-delimited segments of folder_path_for_f6 in order.",
+            "If a segment contains 'archive' (case-insensitive) -> archive_reason = 'Folder name contains archive'; stop.",
+            "Else if a segment matches the date regex -> archive_reason = 'Folder name contains a supported archive date'; stop.",
+            "Emit a finding when archive_reason is non-blank."
+          ],
+          "date_pattern": "/(0[1-9]|[12][0-9]|3[01])(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[0-9]{4}|(0[1-9]|[12][0-9]|3[01])_(0[1-9]|1[0-2])_[0-9]{4}|[0-9]{4}(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])|[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/i",
+          "date_formats_checked": [
+            "ddmmmyyyy",
+            "dd_mm_yyyy",
+            "yyyymmdd",
+            "yyyy-mm-dd"
+          ],
+          "criteria_template": "Folder=[<archive_folder>] Reason=[<archive_reason>] Date formats checked=[ddmmmyyyy, dd_mm_yyyy, yyyymmdd, yyyy-mm-dd]",
+          "line_text_template": "Program-level check: program may be an archive or backup copy. Full path: <pgm_path>"
+        },
+        {
+          "id": "F6B",
+          "name": "Same-folder alternate filename",
+          "pairing": [
+            "Self-join MC_PGM_RULE_BASE on parent_key (same folder), keeping ordered pairs where pgm_path_key(a) < pgm_path_key(b) so each unordered pair appears once.",
+            "Pre-filter: keep only pairs where the shorter stem is an exact case-insensitive prefix of the longer stem (performance filter; the DATA step re-checks)."
+          ],
+          "suffix_logic": [
+            "short_stem / long_stem determined by length; equal-length pairs are dropped.",
+            "Drop if long_stem does not start with short_stem.",
+            "suffix_raw = long_stem after short_stem. had_delim = suffix_raw starts with '_' or '-'.",
+            "suffix_check = suffix_raw with one leading '_' or '-' removed. Drop if empty.",
+            "is_number = suffix_check is all digits.",
+            "is_initial = length(suffix_check) in (1,2) and all alphabetic.",
+            "is_keyword = suffix_check matches /^(bak|backup|bkp|old|orig|prev|previous|copy|arch|archive|v[0-9]+)$/i.",
+            "short_ends_digit = last character of short_stem is a digit.",
+            "Drop unless (is_number or is_initial or is_keyword).",
+            "HARD SUPPRESSION: drop when is_number AND NOT had_delim AND short_ends_digit (numbered output series such as table_1 / table_12, not a backup)."
+          ],
+          "confidence": [
+            {
+              "when": "is_keyword",
+              "level": "HIGH",
+              "reason": "Suffix [<s>] is an explicit backup or version keyword."
+            },
+            {
+              "when": "had_delim and is_initial",
+              "level": "HIGH",
+              "reason": "Delimited one- or two-letter initials [<s>] appended to the base program name."
+            },
+            {
+              "when": "is_initial",
+              "level": "MEDIUM",
+              "reason": "Undelimited one- or two-letter suffix [<s>]. Confirm this is not a distinct program."
+            },
+            {
+              "when": "had_delim and is_number",
+              "level": "MEDIUM",
+              "reason": "Delimited numeric suffix [<s>]. Confirm this is not a legitimate output number."
+            },
+            {
+              "when": "otherwise",
+              "level": "LOW",
+              "reason": "Undelimited numeric suffix [<s>]. Numbered program series commonly match this pattern. Manual confirmation required."
+            }
+          ],
+          "output": "TWO findings per surviving pair — one for each program of the pair, each naming the other as the paired program.",
+          "criteria_template": "Same-folder alternate pair=[<pgm_a>] and [<pgm_b>] Confidence=<level>",
+          "line_text_template": "Program-level check: filename may be an alternate archive or backup copy of <paired_program>. Confidence: <level>. Basis: <reason> Folder: <parent_path>"
+        }
+      ],
+      "post_processing": "Concatenate F6A and F6B findings, then de-duplicate by (pgm_path, criteria).",
+      "line_num": 0,
+      "update": {
+        "supported": false,
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "O1",
+      "rule_name": "DOS cd command",
+      "category": "OS Commands & Shell",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "X or SYSTASK CD shell command that does not work on Linux/target platform. Use rc=dlgcdir(path) instead.",
+      "detection": {
+        "method": "any_of",
+        "preconditions": [
+          "WIN_EXEMPT is false"
+        ],
+        "patterns": [
+          "/\\bx\\s*[\"']cd\\s+/i",
+          "/\\bsystask\\s+command\\s*=\\s*\"cd\\s+/i"
+        ]
+      },
+      "criteria_template": "Matched: x \"cd, x 'cd, or systask command=\"cd",
+      "update": {
+        "supported": true,
+        "win_exemption_applies": true,
+        "idempotency_guard": "/^\\s*\\*\\*\\*\\s*Updated to use dlgcdir\\(\\)\\s*\\*\\*\\*/i must NOT already match",
+        "precedence": "SYSTASK COMMAND=\"CD ...\" is tested FIRST; the generic X \"CD ...\" branch runs only when SYSTASK did not match, so exactly one dlgcdir block is inserted per source line.",
+        "path_extraction": [
+          "SYSTASK: s/^.*\\bsystask\\s+command\\s*=\\s*[\"']cd\\s+([^\"']+)[\"'].*$/\\1/i",
+          "X:       s/^.*\\bx\\s*[\"']cd\\s+([^\"']+)[\"'].*$/\\1/i"
+        ],
+        "guard": "Skip when the extracted path is empty or equals the whole original line (extraction failed).",
+        "path_transform": "translate('\\\\' -> '/') in the replacement block only.",
+        "action": [
+          "Insert ABOVE the original line:",
+          "data _null_;",
+          "   rc = dlgcdir(\"<path>\");",
+          "   put \"NOTE: Change directory return code (0 means success): \" rc;",
+          "run;",
+          "Then write the original line prefixed with '*** Updated to use dlgcdir() *** '"
+        ],
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "O2",
+      "rule_name": "Obtain User ID",
+      "category": "OS Commands & Shell",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "%SYSGET(USERNAME) does not resolve on Linux/target platform. Use %SYSGET(USER) or the automatic macro variable &SYSUSERID.",
+      "detection": {
+        "method": "regex",
+        "pattern": "/%sysget\\s*\\(\\s*username\\s*\\)/i"
+      },
+      "notes": "As of 2026-08-02 the automatic macro variable &SYSUSERID is NOT flagged; it resolves correctly on both platforms. Detection is limited to %SYSGET(USERNAME).",
+      "criteria_template": "Matched: %SYSGET(USERNAME)",
+      "update": {
+        "supported": true,
+        "action": "regex_replace_all",
+        "pattern": "/%sysget\\s*\\(\\s*USERNAME\\s*\\)/i",
+        "replacement": "%sysget(USER)",
+        "update_desc": "Replaced %sysget(USERNAME) with %sysget(USER) for Linux/target platform user ID compatibility.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "O3",
+      "rule_name": "Remove filenames",
+      "category": "OS Commands & Shell",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "FILENAME _ALL_; removes required filerefs such as _GSFNAME. Capture and restore them.",
+      "detection": {
+        "method": "regex",
+        "pattern": "/\\bfilename\\s+_all_\\s*;/i"
+      },
+      "criteria_template": "Matched: filename _all_;",
+      "update": {
+        "supported": true,
+        "idempotency_guard": "/^\\s*\\*\\*\\*\\s*Updated to preserve _GSFNAME\\s*\\*\\*\\*/i must NOT already match",
+        "insert_before": [
+          "%let old_path=;",
+          "",
+          "data _null_;",
+          "    if fileref('_GSFNAME') = 0 then",
+          "    call symputx('old_path', pathname('_GSFNAME'), 'g');",
+          "run;"
+        ],
+        "original_line": "written unchanged",
+        "insert_after": [
+          "data _null_;",
+          "    if symget('old_path') ne '' then call execute(cats('filename _GSFNAME \"', symget('old_path'), '\";'));",
+          "    else call execute('filename _GSFNAME temp;');",
+          "run;"
+        ],
+        "update_desc": "Inserted _GSFNAME save and restore logic around FILENAME _ALL_; for Linux/target platform compatibility.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "O4",
+      "rule_name": "Standard Setup Macro",
+      "category": "OS Commands & Shell",
+      "scope": "program",
+      "enabled": true,
+      "os_scope": "LINUX_ONLY",
+      "special_rule": "MISSING_SETUP",
+      "description": "On Linux/target platform each SAS program must invoke the required standard %setup macro. This check is NOT performed on Windows.",
+      "detection": {
+        "method": "whole_program_flag",
+        "condition": "os_family == 'LINUX' AND has_setup_call != true",
+        "has_setup_call_logic": "See per_program_processing.whole_program_flags.has_setup_call — inline /* */ comments are stripped first, lines starting with '*' are ignored, and an actual percent-sign invocation /%setup\\b\\s*(\\(|;)/i is required."
+      },
+      "line_num": 0,
+      "criteria_template": "Linux only: missing standard %setup macro invocation",
+      "line_text_template": "Program-level check: required standard %setup macro invocation was not found.",
+      "side_effect": "Writes an ERROR: line to the SAS log.",
+      "update": {
+        "supported": false,
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "O5",
+      "rule_name": "Importing Excel",
+      "category": "OS Commands & Shell",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "PROC IMPORT reading an Excel .xlsx file needs OPTIONS VALIDVARNAME=V7 immediately above it so imported variable names follow V7 naming rules.",
+      "detection": {
+        "method": "compound_with_lookahead",
+        "context": "o5_context = line_text + ' ' + next_line1 + ' ' + next_line2 (joined with single spaces, blanks dropped as CATX does)",
+        "conditions": [
+          {
+            "test": "NOT /^\\s*(\\*|\\/\\*)/ on line_text",
+            "meaning": "line is not a comment"
+          },
+          {
+            "test": "/\\bproc\\s+import\\b/i on line_text"
+          },
+          {
+            "test": "/\\.xlsx/i on o5_context OR /\\bdbms\\s*=\\s*xlsx\\b/i on o5_context"
+          },
+          {
+            "test": "NOT /^\\s*options\\s+validvarname\\s*=\\s*v7\\s*;/i on prev_line",
+            "meaning": "the option is not already present immediately above"
+          }
+        ]
+      },
+      "criteria_template": "Matched: proc import plus .xlsx or dbms=xlsx on same line or within next two lines",
+      "update": {
+        "supported": true,
+        "action": "insert_before",
+        "inserted_line": "options validvarname=v7;",
+        "original_line": "written unchanged",
+        "update_desc": "Inserted OPTIONS VALIDVARNAME=V7 before Excel PROC IMPORT using .xlsx or DBMS=XLSX.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "O6",
+      "rule_name": "Copying files",
+      "category": "OS Commands & Shell",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Copying files with an X/SYSTASK COPY shell command does not work on Linux/target platform. Use FCOPY.",
+      "detection": {
+        "method": "any_of",
+        "patterns": [
+          "/\\bx\\s*\"copy\\s+/i",
+          "/\\bsystask\\s+command\\s*=\\s*\"cmd\\s+\\/c\\s+copy\\s+/i"
+        ],
+        "note": "Detection matches only the double-quoted X form; the UPDATE branch uses a stricter anchored pattern that accepts either quote style (see update.match_pattern)."
+      },
+      "criteria_template": "Matched: x \"copy or systask command=\"cmd /c copy",
+      "update": {
+        "supported": true,
+        "match_pattern": "/^\\s*x\\s*[\"']copy\\s+/i",
+        "idempotency_guard": "/^\\s*\\*\\*\\*\\s*Update to use fcopy \\( \\)\\s*\\*\\*\\*/i must NOT already match",
+        "argument_extraction": {
+          "payload_regex": "s/^\\s*x\\s*[\"']copy\\s+(.*)[\"']\\s*;?\\s*$/\\1/i  (greedy, so doubled quotes inside the command are not treated as the end of the X string)",
+          "quoted_path_parsing": "If the payload starts with a doubled quotation mark (\"\"), use the doubled-quote pairs to delimit source and destination — this preserves spaces in path names.",
+          "fallback": "Otherwise split the payload on spaces: word 1 = source, word 2 = destination.",
+          "cleanup": "Remove any remaining doubled-quote wrappers from both paths.",
+          "guard": "Apply only when both source and destination are non-blank and the payload differs from the original line."
+        },
+        "action": [
+          "Write the original line prefixed with '*** Update to use fcopy ( ) *** ', then insert BELOW it:",
+          "filename src  \"<oldfile>\";",
+          "filename dest \"<newfile>\";",
+          "",
+          "data _null_;",
+          "    rc = fcopy('src', 'dest');",
+          "    if rc = 0 then put \"NOTE: Copied <oldfile> to <newfile>\";",
+          "    else put \"ERROR: Copy failed. \" rc= sysmsg();",
+          "run;"
+        ],
+        "update_desc": "Commented X COPY command and inserted FCOPY replacement logic from <oldfile> to <newfile>.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "S1",
+      "rule_name": "Current program name",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "&_SASPROGRAMFILE captures the current program path on Windows; Linux/target platform needs %sysget(SAS_EXECFILEPATH).",
+      "detection": {
+        "method": "regex",
+        "pattern": "/_sasprogramfile/i"
+      },
+      "criteria_template": "Matched: _sasprogramfile",
+      "update": {
+        "supported": true,
+        "action": "regex_replace_all",
+        "pattern": "/&_SASPROGRAMFILE/i",
+        "replacement": "%sysget(SAS_EXECFILEPATH)",
+        "update_desc": "Replaced &_SASPROGRAMFILE with %sysget(SAS_EXECFILEPATH) for Linux/target platform current-program-path compatibility.",
+        "note": "Detection matches the bare token '_sasprogramfile'; the update pattern requires the leading ampersand.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "S2",
+      "rule_name": "Appending to Excel",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "PROC APPEND against an Excel libname (libname xlout excel \"&outfile\" scan_text=no;) is a Windows-only workflow and must be reworked, typically to PROC IMPORT/EXPORT.",
+      "detection": {
+        "method": "regex",
+        "pattern": "/\\bproc\\s+append\\b/i"
+      },
+      "criteria_template": "Matched: proc append",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "S3",
+      "rule_name": "Libname Excel",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Excel LIBNAME / PROC EXPORT / PROC IMPORT DBMS=EXCEL logic that works on Windows must be reworked for Linux.",
+      "detection": {
+        "method": "ordered_if_elseif_chain",
+        "important": "These three branches are MUTUALLY EXCLUSIVE — at most one S3 finding per line, first match wins.",
+        "branches": [
+          {
+            "order": 1,
+            "conditions_all": [
+              "/\\blibname\\b/i",
+              "/\\bexcel\\b/i"
+            ],
+            "criteria": "Matched on same line: libname + excel",
+            "rule_desc": "Line contains LIBNAME and EXCEL on the same line."
+          },
+          {
+            "order": 2,
+            "conditions_all": [
+              "/\\bproc\\s+export\\b/i"
+            ],
+            "criteria": "Matched: proc export",
+            "rule_desc": "Line contains PROC EXPORT."
+          },
+          {
+            "order": 3,
+            "conditions_all": [
+              "/\\bproc\\s+import\\b/i",
+              "/\\bdbms\\s*=\\s*excel\\b/i"
+            ],
+            "criteria": "Matched on same line: proc import + dbms=excel",
+            "rule_desc": "Line contains PROC IMPORT and DBMS=EXCEL on the same line."
+          }
+        ]
+      },
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "S4",
+      "rule_name": "ERROR/WARNING log position",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "On Windows ERROR:/WARNING: appear in column 1 of the SAS log; on Linux they appear in the second column. Log-parsing logic must be reviewed.",
+      "detection": {
+        "method": "case_sensitive_substring_any_of",
+        "case_sensitive": true,
+        "conditions_any": [
+          "'ERROR:' in line",
+          "'WARNING:' in line",
+          "('ER' in line AND 'ROR:' in line)",
+          "('WAR' in line AND 'NING:' in line)"
+        ],
+        "note": "SAS INDEX() is case-sensitive — only UPPERCASE occurrences match. The split forms exist because the macro source itself splits the literals to avoid false log hits; they also catch code that concatenates 'ER'||'ROR:'."
+      },
+      "criteria_template": "Matched uppercase: ERROR:, WARNING:, ER + ROR:, or WAR + NING:",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "S5",
+      "rule_name": "Windows path backslash",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Windows path separators that must be converted to forward slashes for Linux/target platform.",
+      "detection": {
+        "method": "shared_helper",
+        "helper": "s5_classify",
+        "finding_when": "classification == 'PATH'",
+        "indicators": [
+          "C:\\",
+          "D:\\",
+          "E:\\",
+          "F:\\",
+          "G:\\",
+          "H:\\",
+          "\\\\ (two consecutive backslashes)",
+          ".\\",
+          "..\\"
+        ],
+        "pass_conditions": [
+          "No backslash on the line",
+          "Line's first nonblank characters are /*",
+          "Line contains PRXCHANGE in any letter case",
+          "Any other backslash usage (RTF control words such as \\brdrb, FORMCHAR values, ODS ESCAPECHAR definitions, etc.)"
+        ]
+      },
+      "criteria_template": "Matched S5 path indicator: C:\\, D:\\, E:\\, F:\\, G:\\, H:\\, two consecutive backslashes, .\\, or ..\\; Action=CONVERT",
+      "update": {
+        "supported": true,
+        "action": "translate_all_backslashes_to_forward_slashes on the whole line",
+        "condition": "identical s5_classify result == 'PATH' (shared helper guarantees detection and update agree)",
+        "update_desc": "Converted Windows backslash path separator to Linux/target platform forward slash separator.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "S6",
+      "rule_name": "PROC IMPORT Excel DBMS",
+      "category": "SAS Environment & Setup",
+      "scope": "line",
+      "enabled": false,
+      "retired_date": "2026-05-01",
+      "retire_reason": "PROC IMPORT fileref conversion is no longer required for the target platform migration check.",
+      "historical_criteria": [
+        "proc import anywhere in program",
+        "dbms=xls/xlsx/xlsb/xlsm/dde anywhere in program"
+      ],
+      "update": {
+        "supported": false,
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "S7",
+      "rule_name": "Verify Global vs Purpose macros",
+      "category": "SAS Environment & Setup",
+      "scope": "environment",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "GLOBAL_PURPOSE_MACRO_COMPARE",
+      "added": "2026-06-27",
+      "description": "Compare SAS autocall macros that exist in BOTH the purpose-level /modules folder and the remaining global /modules folders from SASAUTOS, and report line-level differences.",
+      "detection": {
+        "sasautos_parsing": [
+          "Read the SASAUTOS option value.",
+          "Tokenize on the delimiters '(), ' honoring quotes.",
+          "A token containing any of the characters '\\\\/:' is treated as a literal path; any other unquoted token is treated as a fileref and expanded via pathname().",
+          "If the expansion starts with '(' it is an aggregate fileref: re-tokenize the parenthesized list the same way.",
+          "Keep only folders whose normalized (lowercased, backslashes to slashes) path contains '/modules'.",
+          "Sequence matters: the FIRST /modules folder encountered is role 'PURPOSE'; every later one is role 'GLOBAL'.",
+          "If no /modules paths are found, warn and skip S7 entirely."
+        ],
+        "macro_inventory": "For each kept folder, list its entries and keep files matching /\\.sas$/i that can be opened for reading.",
+        "pairing": "Inner join PURPOSE files to GLOBAL files on lowercased filename, where the full paths differ. Ordered by macro name then global folder.",
+        "comparison": {
+          "LINUX": {
+            "primary": "git diff --no-index --diff-algorithm=histogram --ignore-space-at-eol --no-color --unified=0 <purpose> <global>",
+            "fallback_1": "same git diff with --diff-algorithm=patience (used when git returns rc 129, i.e. histogram unsupported)",
+            "fallback_2": "/usr/bin/diff -a --strip-trailing-cr --minimal -d -U0 <purpose> <global> (when git is unavailable)",
+            "parsing": [
+              "Ignore blank lines and metadata: 'diff --git', 'index ', 'old mode ', 'new mode ', 'deleted file ', 'new file ', '---', '+++', lines starting with a backslash.",
+              "Hunk header /^@@\\s+-(\\d+)(,(\\d+))?\\s+\\+(\\d+)(,(\\d+))?\\s+@@/ resets purpose_line_num = group1 - 1, global_line_num = group4 - 1, and the per-hunk sequence counters.",
+              "A '-' line is a PURPOSE-side line (removed/modified): increment purpose counters, text = line[1:].",
+              "A '+' line is a GLOBAL-side line (added/modified): increment global counters, text = line[1:].",
+              "A ' ' context line increments both counters (rare at -U0).",
+              "Anything else is a command message: logged for troubleshooting, never turned into a finding.",
+              "Pair '-' and '+' entries by (hunk_id, sequence-within-hunk) to produce modified/added/deleted classification."
+            ],
+            "zero_finding_fallback": "If the diff parser yields 0 findings for a pair, run the SAS line-by-line fallback below."
+          },
+          "WINDOWS_AND_OTHER": {
+            "method": "line_by_line",
+            "logic": "Merge the two files by line number; emit a finding when one file has a line the other lacks, or when the texts at the same line number differ."
+          }
+        }
+      },
+      "extra_finding_fields": [
+        "s7_macro_name",
+        "s7_purpose_macro_path",
+        "s7_global_macro_path",
+        "s7_purpose_line_text",
+        "s7_global_line_text"
+      ],
+      "criteria_examples": [
+        "Git/GNU zero-context diff found an added, deleted, or modified macro line without reporting unchanged shifted lines",
+        "Purpose-level macro line differs from matching global macro line",
+        "Linux diff parser produced no parseable findings, so SAS line-by-line fallback identified the differing macro line"
+      ],
+      "reported_on_worksheet": "Global Macro Details",
+      "update": {
+        "supported": false,
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "D1",
+      "rule_name": "BAT file",
+      "category": "Data Import & Export",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "References to Windows .bat files must be reviewed and reworked as Linux shell script logic.",
+      "detection": {
+        "method": "regex",
+        "pattern": "/\\.bat\\b/i"
+      },
+      "criteria_template": "Matched: .bat",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "D2",
+      "rule_name": "Executing Command",
+      "category": "Data Import & Export",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Line references a .sh file but the program never calls chmod. On Linux the shell script's permissions must be set before execution.",
+      "detection": {
+        "method": "compound",
+        "conditions": [
+          {
+            "pattern": "/\\.sh(\\s|[\"';]|$)/i",
+            "on": "line_text"
+          },
+          {
+            "flag": "has_chmod",
+            "must_be": false,
+            "flag_pattern": "/\\bchmod\\b/i evaluated over the WHOLE program"
+          }
+        ]
+      },
+      "criteria_template": "Matched: .sh; Missing in program: chmod",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "D3",
+      "rule_name": "Special characters",
+      "category": "Data Import & Export",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Curly/smart quotes usable on Windows cause errors on Linux. Replace with a standard straight single quote.",
+      "detection": {
+        "method": "substring_any_of",
+        "case_sensitive": true,
+        "characters": [
+          {
+            "char": "‘",
+            "name": "LEFT SINGLE QUOTATION MARK",
+            "codepoint": "U+2018"
+          },
+          {
+            "char": "’",
+            "name": "RIGHT SINGLE QUOTATION MARK",
+            "codepoint": "U+2019"
+          }
+        ],
+        "note": "The literals appear mojibaked in the SAS source (UTF-8 bytes read as Windows-1252). In Python match the actual code points U+2018 and U+2019, and consider also matching their raw byte sequences b'\\xe2\\x80\\x98' / b'\\xe2\\x80\\x99' when reading files as bytes."
+      },
+      "criteria_template": "Matched: ‘ or ’",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding; suggested replacement is a straight apostrophe.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "C1",
+      "rule_name": "Source-Platform Folders",
+      "category": "Character Encoding & Special Characters",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Standard source-platform folders that do not exist on Linux and must be reviewed/remapped.",
+      "detection": {
+        "method": "any_of",
+        "patterns": [
+          "/patient profiles[\\\\\\/]/i",
+          "/[\\\\\\/]vendor/i",
+          "/[\\\\\\/]profile/i",
+          "/anadata[\\\\\\/]sdtm([\\\\\\/]|\\b)/i",
+          "/reference[\\\\\\/]smq/i",
+          "/validate[\\\\\\/]tlf[\\\\\\/]qcdata/i"
+        ],
+        "note": "Each pattern accepts either a backslash or a forward slash as the separator."
+      },
+      "criteria_template": "Matched source-platform folder: Patient Profiles, vendor, profile, anadata/SDTM, reference/SMQ, or validate/tlf/QCdata",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "C2",
+      "rule_name": "Write to SASUSER",
+      "category": "Character Encoding & Special Characters",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "SASUSER is writable on Windows but is a read-only library on Linux.",
+      "detection": {
+        "method": "regex",
+        "pattern": "/\\bsasuser\\b/i"
+      },
+      "criteria_template": "Matched: sasuser",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "L1",
+      "rule_name": "Standard libnames",
+      "category": "Library & Path References",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "LIBNAME statements for standard Windows/source platform librefs that do not exist or must be reviewed on Linux/target platform.",
+      "detection": {
+        "method": "regex",
+        "preconditions": [
+          "WIN_EXEMPT is false"
+        ],
+        "pattern": "/\\blibname\\s+(cdf|here|pfdata|vendordata|rawvend|raww|sdtma|smq|tlfout|tlfvdata|utility)\\b/i",
+        "librefs": [
+          "CDF",
+          "HERE",
+          "PFDATA",
+          "VENDORPKATA",
+          "RAWVEND",
+          "RAWW",
+          "SDTMA",
+          "SMQ",
+          "TLFOUT",
+          "TLFVDATA",
+          "UTILITY"
+        ]
+      },
+      "criteria_template": "Matched: libname CDF/HERE/PFDATA/VENDORPKATA/RAWVEND/RAWW/SDTMA/SMQ/TLFOUT/TLFVDATA/UTILITY",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "L2",
+      "rule_name": "Directory of files",
+      "category": "Library & Path References",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "FILENAME PIPE usage (directory listings, shell commands) must have its command syntax reviewed for Linux/target platform.",
+      "detection": {
+        "method": "compound",
+        "conditions_all": [
+          "/\\bfilename\\b/i",
+          "/\\bpipe\\b/i"
+        ],
+        "scope_note": "Both tokens must appear on the SAME line."
+      },
+      "criteria_template": "Matched on same line: filename + pipe",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    },
+    {
+      "rule_id": "L3",
+      "rule_name": "Delete files",
+      "category": "Library & Path References",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "description": "Windows DEL commands issued through X or SYSTASK must be converted to Linux rm -f.",
+      "detection": {
+        "method": "compound",
+        "conditions": [
+          {
+            "test": "NOT /^\\s*(\\*|\\/\\*)/ on line_text",
+            "meaning": "line is not a comment"
+          },
+          {
+            "any_of": [
+              "/\\bx\\s*[\"']del\\s+/i",
+              "/\\bsystask\\s+command\\s*=\\s*\"del\\s+/i"
+            ]
+          }
+        ]
+      },
+      "criteria_template": "Matched: x \"del, x 'del, or systask command=\"del",
+      "update": {
+        "supported": true,
+        "idempotency_guard": "/^\\s*\\*\\*\\*\\s*Update del command with rm\\s*\\*\\*\\*;/i must NOT already match",
+        "replacements_ordered": [
+          {
+            "pattern": "s/(\\bx\\s*[\"'])del\\s+/\\1rm -f /i",
+            "count": 1
+          },
+          {
+            "pattern": "s/(\\bsystask\\s+command\\s*=\\s*\")del\\s+/\\1rm -f /i",
+            "count": 1,
+            "applies_when": "the X form did not match"
+          }
+        ],
+        "post_action": "If the line changed, prefix it with '*** Update del command with rm ***; '",
+        "update_desc": "Commented Windows DEL command and replaced DEL with rm -f for Linux/target platform delete compatibility.",
+        "applied_when_mc_update_y": true
+      }
+    },
+    {
+      "rule_id": "L4",
+      "rule_name": "Encoding-sensitive characters",
+      "category": "Library & Path References",
+      "scope": "line",
+      "enabled": true,
+      "os_scope": "ALL",
+      "special_rule": "ENCODING_RISK",
+      "description": "Lines containing characters whose byte value is greater than 127; these behave differently between Windows and Linux/target platform.",
+      "detection": {
+        "method": "byte_scan",
+        "fast_gate": "/[^\\x00-\\x7F]/ — only inspect individual bytes when the gate matches",
+        "logic": "Walk the line character by character; for each character with rank(c) > 127 record its 1-based position and its two-digit hex value. Finding when the count > 0.",
+        "explicit_non_use": "NOTALNUM is deliberately NOT used: spaces, quotes, operators and punctuation are valid SAS characters and must not be flagged.",
+        "python": "for i, ch in enumerate(line, 1): if ord(ch) > 127: record (i, f'{ord(ch):02X}')  — note SAS operates on single bytes, so reading the file as latin-1/bytes reproduces positions exactly."
+      },
+      "criteria_template": "Encoding risk count=<n>; Characters: pos<i>=[NON_ASCII], ...; Hex: pos<i>=[HEX:<XX>], ...",
+      "update": {
+        "supported": false,
+        "note": "Review-only finding.",
+        "applied_when_mc_update_y": false
+      }
+    }
+  ],
+  "rule_evaluation_order": {
+    "note": "Rules are evaluated in this order inside the per-line DATA step. Each is an independent IF (a line can trigger many), except the S3 chain which is if/else-if.",
+    "line_level_order": [
+      "O1",
+      "O2",
+      "O3",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "D1",
+      "D2",
+      "D3",
+      "C1",
+      "C2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "O5",
+      "O6",
+      "F3",
+      "F1",
+      "F2",
+      "F4(disabled)"
+    ],
+    "program_level": [
+      "O4"
+    ],
+    "inventory_level_run_once_per_execution": [
+      "F5",
+      "F6"
+    ],
+    "environment_level_run_once_per_execution": [
+      "S7"
+    ]
+  },
+  "update_mode": {
+    "enabled_when": "MC_UPDATE resolves to 'Y'",
+    "skip_conditions": [
+      "The source program's immediate folder name contains 'archive' in any case -> program is scan-only, no archive subfolder is created and no in-place update occurs.",
+      "The source folder cannot be determined from the program path."
+    ],
+    "backup_procedure": [
+      "Create an 'archive' subfolder beside the source program if it does not exist.",
+      "Backup name = <stem>_<yyyymmdd>.sas; existing same-day backups are preserved by appending _2, _3, ...",
+      "Windows: COPY /B /Y source -> final dated backup name (with temporary XMIN NOXWAIT XSYNC applied and the caller's settings restored afterwards).",
+      "Linux: cp -p source backup.",
+      "Post-copy validation is REQUIRED before the original may be updated: backup exists, size is nonzero, source and backup byte counts match, and Last Modified timestamps match.",
+      "Only after the timestamp-preserving backup succeeds is the original program updated in place."
+    ],
+    "rules_with_update_logic": [
+      "F1",
+      "F2",
+      "F3",
+      "O1",
+      "O2",
+      "O3",
+      "O5",
+      "O6",
+      "L3",
+      "S1",
+      "S5"
+    ],
+    "update_record_fields": [
+      "rule_id",
+      "update_desc",
+      "pgm_name",
+      "pgm_path",
+      "output_path",
+      "line_num",
+      "original_text",
+      "updated_text"
+    ],
+    "line_write_contract": "Exactly one output line is written per input line, plus any inserted replacement block above (O1 dlgcdir block, O3 save block, O5 options line) or below (O6 fcopy block, O3 restore block).",
+    "rules_with_update_logic_disabled": [
+      "F4 (mc_rule_f4_enabled=N)"
+    ],
+    "update_application_order": [
+      "F1",
+      "F2",
+      "F3",
+      "F4(disabled)",
+      "O1",
+      "O2",
+      "O3",
+      "O5",
+      "O6",
+      "L3",
+      "S1",
+      "S5"
+    ],
+    "order_note": "Rules mutate one shared 'updated_text' in this order, so later rules see earlier rules' output (for example S5 converts backslashes on a line whose folder casing F2 already corrected). Insert-blocks (O1 dlgcdir, O3 save, O5 options) are written above the line; O6 fcopy and O3 restore are written below it.",
+    "see_also": "mc_update_applicability (top-level summary of applicable vs report-only rules)"
+  },
+  "output_workbook": {
+    "worksheets": [
+      {
+        "name": "Migration Check Details",
+        "content": "All findings except S7"
+      },
+      {
+        "name": "Global Macro Details",
+        "content": "S7 findings with purpose/global macro paths and differing line texts"
+      },
+      {
+        "name": "Rules List",
+        "content": "RULE_DEF: category, rule_id, rule_name, rule_desc, mc_special_rule, criteria"
+      },
+      {
+        "name": "Migration Check Summary",
+        "content": "Findings sorted by full program path, then physical source line number; includes Program Path so same-named programs in different folders are not interleaved"
+      },
+      {
+        "name": "Update Details",
+        "content": "MC_UPDATE records (update mode only)"
+      },
+      {
+        "name": "Report Information",
+        "content": "User ID, run datetime, all parameters (raw and resolved), SYSSCP, update mode, backup strategy, crawl method/root/scope/count"
+      }
+    ],
+    "text_sanitization": "Every displayed text column is rebuilt character by character: bytes 32-126 pass through, bytes 9/10/13 become a space, everything else becomes '?'.",
+    "display_truncations": {
+      "pgm_name_disp": 132
+    }
+  },
+  "retired_or_disabled": [
+    {
+      "rule_id": "F4",
+      "status": "disabled_by_toggle",
+      "toggle": "mc_rule_f4_enabled=N",
+      "date": "2026-08-02"
+    },
+    {
+      "rule_id": "S6",
+      "status": "retired",
+      "date": "2026-05-01"
+    }
+  ],
+  "python_implementation_notes": [
+    "Read each .sas file as bytes and decode with latin-1 (or process bytes directly) so that rank(c) > 127 positions in Rule L4 match SAS byte semantics exactly.",
+    "Precompile every pattern once (SAS uses PRXPARSE with RETAIN, i.e. compile-once semantics).",
+    "Precompute line.upper() once per line and reuse it for S5 and the WIN exemption, matching the macro's LINE_UP optimization.",
+    "Compute the whole-program flags (has_chmod, has_validvarname_v7, has_setup_call) in the same single pass that reads the source, before evaluating any line-level rule.",
+    "Build the prev1/prev2/prev3/next1/next2 look-around arrays once per program and reuse them.",
+    "Memoize directory listings for Rule F2 per program, keyed on (parent_path, lowercase_reference).",
+    "F5, F6 and S7 run once per execution over the whole inventory — do not evaluate them inside the per-program loop.",
+    "S4 must use case-sensitive substring matching; every other textual rule listed above is case-insensitive unless stated.",
+    "Findings are additive: a single line commonly produces several rule hits, and F1/F2/F3 can produce multiple matches contributing to one criteria string.",
+    "When implementing update mode, apply the rules to a single mutable 'updated_text' in the same order the macro uses, since later rules see the text produced by earlier ones (for example S5 runs after F2's casing correction)."
+  ],
+  "copyright": "Copyright (c) 2026 Meta-Xceed, Inc.",
+  "license": "Apache-2.0"
+}

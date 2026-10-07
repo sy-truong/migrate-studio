@@ -1,0 +1,16 @@
+Migrate Studio
+Copyright (c) 2026 Meta-Xceed, Inc.
+
+This product includes software developed at Meta-Xceed, Inc. (https://meta-x.com).
+
+This distribution also uses the following third-party components:
+
+- openpyxl (Python workbook support; MIT License)
+- pytest (Python test suite; MIT License)
+- fflate 0.8.2 (bundled browser ZIP support; MIT License)
+- R Shiny edition CRAN packages, installed separately and not bundled: shiny,
+  htmltools, httpuv, digest (GPL); jsonlite, readxl, testthat (MIT);
+  reticulate (Apache-2.0)
+- IBM Plex Sans and IBM Plex Mono (loaded from Google Fonts; SIL Open Font License 1.1)
+
+See THIRD-PARTY-NOTICES.md for component locations and attribution details.

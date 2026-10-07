@@ -1,0 +1,11 @@
+* text=auto
+*.sas text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.R text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.png binary
+*.ico binary
+*.xlsx binary

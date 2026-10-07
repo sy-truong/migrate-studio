@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Migrate Studio change-arrow mark.
+
+  Same 36x36 geometry used by the in-page logo symbol: a right-facing arrow
+  from original to fixed on the coral -> pink -> violet gradient.
+  Kept simple so the arrow remains legible at 16px favicon size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+  <defs>
+    <linearGradient id="migArrowGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff7a59"/>
+      <stop offset="48%" stop-color="#ff4d8d"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect x="1.5" y="1.5" width="33" height="33" rx="9" fill="url(#migArrowGradient)"/>
+  <g fill="none" stroke="#fff" stroke-width="3.2"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18h17"/>
+    <path d="m20 11 7 7-7 7"/>
+    <path d="M9 11.8v12.4"/>
+  </g>
+</svg>

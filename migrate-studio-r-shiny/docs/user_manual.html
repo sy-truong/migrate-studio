@@ -1,0 +1,361 @@
+<!doctype html>
+<!--
+Migrate Studio
+
+Copyright (c) 2026 Meta-Xceed, Inc.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migrate Studio - User Manual</title>
+<meta name="description" content="Migrate Studio user manual for selecting SAS program folders, applying migration rules, comparing changes, managing history, backups, revert, save, and downloads.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='migArrowGradientManualIcon' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff7a59'/%3E%3Cstop offset='48%25' stop-color='%23ff4d8d'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='1.5' y='1.5' width='33' height='33' rx='9' fill='url(%23migArrowGradientManualIcon)'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h17'/%3E%3Cpath d='m20 11 7 7-7 7'/%3E%3Cpath d='M9 11.8v12.4'/%3E%3C/g%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='migArrowGradientManualIcon' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff7a59'/%3E%3Cstop offset='48%25' stop-color='%23ff4d8d'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='1.5' y='1.5' width='33' height='33' rx='9' fill='url(%23migArrowGradientManualIcon)'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h17'/%3E%3Cpath d='m20 11 7 7-7 7'/%3E%3Cpath d='M9 11.8v12.4'/%3E%3C/g%3E%3C/svg%3E" type="image/svg+xml" sizes="32x32">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cdefs%3E%3ClinearGradient id='migArrowGradientManualIcon' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23ff7a59'/%3E%3Cstop offset='48%25' stop-color='%23ff4d8d'/%3E%3Cstop offset='100%25' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='1.5' y='1.5' width='33' height='33' rx='9' fill='url(%23migArrowGradientManualIcon)'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h17'/%3E%3Cpath d='m20 11 7 7-7 7'/%3E%3Cpath d='M9 11.8v12.4'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+(function () {
+  'use strict';
+  var DAY_START = 6, DAY_END = 18;
+  function pacificHour(now) {
+    now = now || new Date();
+    try {
+      return parseInt(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false
+      }).format(now), 10) % 24;
+    } catch (e) { return (now.getUTCHours() + 16) % 24; }
+  }
+  function apply() {
+    var h = pacificHour();
+    document.documentElement.setAttribute('data-theme',
+      (h >= DAY_START && h < DAY_END) ? 'light' : 'dark');
+  }
+  apply();
+  if (window.setInterval) window.setInterval(apply, 60000);
+})();
+</script>
+<link rel="stylesheet" href="../css/migrate-studio.css">
+<link rel="stylesheet" href="../css/theme.css">
+<link rel="stylesheet" href="../css/mig-shiny.css">
+<style>
+  html{scroll-behavior:smooth;scroll-padding-top:82px}
+  body{overflow:auto;min-height:100vh}
+  nav.manual-top{position:sticky;top:0}
+  .manual-top .nav-inner{max-width:1600px;margin:0 auto}
+  .manual-top .logo{cursor:pointer}
+  .manual-top .logo:hover .logo-app{text-decoration:none}
+  .manual-kicker{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .manual-shell{display:grid;grid-template-columns:270px minmax(0,920px);gap:34px;
+    max-width:1260px;margin:0 auto;padding:30px 28px 70px;align-items:start}
+  .manual-toc{position:sticky;top:82px;max-height:calc(100vh - 105px);overflow:auto;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px}
+  .manual-toc h2{font-size:12px;color:var(--heading);margin:0 0 10px;
+    text-transform:uppercase;letter-spacing:.05em}
+  .manual-toc a{display:block;font-size:12.5px;color:var(--muted);padding:5px 7px;
+    border-radius:7px}
+  .manual-toc a:hover,.manual-toc a:focus-visible{background:var(--surface-2);color:var(--ink)}
+  .manual-toc .toc-sub{padding-left:13px;font-size:11.8px}
+  .manual-main{min-width:0}
+  .manual-hero{padding:16px 0 28px;border-bottom:1px solid var(--line);margin-bottom:30px}
+  .manual-hero h1{font-size:38px;line-height:1.1;letter-spacing:-.035em;margin:6px 0 10px}
+  .manual-hero p{font-size:16px;color:var(--muted);max-width:760px}
+  .manual-chip-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+  .manual-chip{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);
+    border:1px solid var(--line);background:var(--surface-3);border-radius:999px;padding:4px 8px}
+  .manual-section{padding:6px 0 30px;border-bottom:1px solid var(--line);margin-bottom:30px}
+  .manual-section:last-child{border-bottom:0}
+  .manual-section h2,.manual-section h3{color:var(--heading);line-height:1.25}
+  .manual-section h2{font-size:24px;margin:0 0 12px;letter-spacing:-.02em}
+  .manual-section h3{font-size:17px;margin:24px 0 8px}
+  .manual-section p{margin:0 0 12px;color:var(--ink)}
+  .manual-section ul,.manual-section ol{margin:8px 0 14px 22px}
+  .manual-section li{margin:5px 0}
+  .anchor-link{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.72em;
+    margin-left:8px;vertical-align:middle;opacity:.7}
+  .anchor-link:hover{color:var(--violet);opacity:1}
+  .manual-callout{border:1px solid var(--line);border-left:4px solid var(--violet);
+    background:var(--card);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .manual-callout.warning{border-left-color:var(--amber);background:var(--tint-amber)}
+  .manual-callout.safe{border-left-color:var(--green);background:var(--tint-green)}
+  .manual-callout strong{color:var(--heading)}
+  .manual-steps{counter-reset:manual-step;list-style:none;margin-left:0!important}
+  .manual-steps li{counter-increment:manual-step;position:relative;padding:9px 10px 9px 44px;
+    border:1px solid var(--line);background:var(--card);border-radius:10px;margin:8px 0}
+  .manual-steps li::before{content:counter(manual-step);position:absolute;left:12px;top:9px;
+    width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+    border-radius:50%;background:var(--grad);color:#fff;font:600 11px 'IBM Plex Mono',monospace}
+  .manual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+  .manual-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .manual-card h3{margin:0 0 6px;font-size:15px}
+  .manual-card p{font-size:13px;color:var(--muted);margin:0}
+  .manual-shot{margin:16px 0 20px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;overflow:hidden}
+  .manual-shot img{display:block;width:100%;height:auto;background:var(--bg)}
+  .manual-shot figcaption{font-size:11.5px;color:var(--muted);padding:9px 12px;
+    border-top:1px solid var(--line);font-family:'IBM Plex Mono',monospace}
+  .manual-table-wrap{overflow:auto;margin:12px 0;border:1px solid var(--line);border-radius:10px}
+  .manual-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card)}
+  .manual-table th,.manual-table td{padding:9px 10px;border-bottom:1px solid var(--grid-line);text-align:left;vertical-align:top}
+  .manual-table th{background:var(--grid-head);font-weight:650;color:var(--heading)}
+  .manual-table tr:last-child td{border-bottom:0}
+  code,.manual-code{font-family:'IBM Plex Mono',monospace;font-size:.92em;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+  .manual-link-example{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    padding:8px 10px;background:var(--surface-3);border:1px solid var(--line);border-radius:8px;
+    overflow-wrap:anywhere;color:var(--muted);margin:8px 0}
+  .manual-two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+  .manual-footer{max-width:1260px;margin:0 auto;padding:0 28px 30px;color:var(--muted);font-size:12px}
+  @media(max-width:900px){
+    .manual-shell{grid-template-columns:1fr;padding:20px 16px 55px}.manual-toc{position:relative;top:auto;max-height:none}
+    .manual-grid,.manual-two-col{grid-template-columns:1fr}.manual-hero h1{font-size:31px}
+    .manual-top .nav-label-wrap{display:none}
+  }
+</style>
+</head>
+<body>
+<nav class="manual-top">
+  <div class="nav-inner">
+    <a class="logo" href="./" aria-label="Back to Migrate Studio">
+      <svg class="logo-img" width="34" height="34" viewBox="0 0 36 36" aria-hidden="true">
+        <defs>
+          <linearGradient id="migArrowGradientManual" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#ff7a59"/>
+            <stop offset="48%" stop-color="#ff4d8d"/>
+            <stop offset="100%" stop-color="#8b5cf6"/>
+          </linearGradient>
+        </defs>
+        <rect x="1.5" y="1.5" width="33" height="33" rx="9" fill="url(#migArrowGradientManual)"/>
+        <g fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18h17"/>
+          <path d="m20 11 7 7-7 7"/>
+          <path d="M9 11.8v12.4"/>
+        </g>
+      </svg>
+      <span class="logo-app">Migrate Studio</span>
+    </a>
+    <div class="nav-label-wrap"><span class="nav-label-sep">/</span><span class="nav-label">User Manual</span></div>
+    <div class="nav-cta"><a class="btn btn-sm btn-dark" href="./">Back to app</a></div>
+  </div>
+</nav>
+
+<div class="manual-shell">
+  <aside class="manual-toc" aria-label="User manual sections">
+    <h2>Contents</h2>
+    <a href="#overview">Overview</a>
+    <a href="#quick-start">Quick start</a>
+    <a href="#screen-layout">Screen layout</a>
+    <a href="#folder-selection">Folder selection</a>
+    <a class="toc-sub" href="#reopening-migrated-folder">Reopen migrated folder</a>
+    <a href="#program-list">Program list</a>
+    <a href="#migration-name">Migration name</a>
+    <a href="#rules">Rules</a>
+    <a href="#apply-fix">Apply Fix</a>
+    <a class="toc-sub" href="#backup-safety">Backup safety</a>
+    <a href="#fixed-sas">Fixed SAS</a>
+    <a href="#fix-compare">Fix Compare</a>
+    <a href="#history">History</a>
+    <a class="toc-sub" href="#migration-history">Migration History</a>
+    <a class="toc-sub" href="#this-program">This Program</a>
+    <a href="#revert">Revert</a>
+    <a href="#save">Save</a>
+    <a href="#downloads">Downloads</a>
+    <a href="#profile">Profile</a>
+    <a href="#browser-modes">Browser & folder modes</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+    <a href="#deep-links">Section links</a>
+  </aside>
+
+  <main class="manual-main">
+    <header class="manual-hero" id="overview">
+      <div class="manual-kicker">Migrate Studio · User Manual</div>
+      <h1>Apply migration fixes to SAS programs with an original backup and auditable history.</h1>
+      <p>Migrate Studio reads a folder of SAS programs, applies selected migration rules, writes approved fixes in place when write access is available, and lets you compare every changed program against its original.</p>
+      <div class="manual-chip-row"><span class="manual-chip">R Shiny edition</span><span class="manual-chip">Build 2026.09.21</span></div>
+    </header>
+
+    <section class="manual-section" id="quick-start">
+      <h2>Quick start <a class="anchor-link" href="#quick-start">#</a></h2>
+      <ol class="manual-steps">
+        <li>Click <strong>Folder</strong> and choose the study/program folder containing the SAS programs you want to migrate.</li>
+        <li>Review the program list, select one or more programs, and confirm which rules are ticked on the <strong>Rules</strong> tab.</li>
+        <li>Click <strong>Apply Fix</strong>. Migrate Studio creates or verifies the original backup before writing fixed programs in place.</li>
+        <li>Review <strong>Fixed SAS</strong> and <strong>Fix Compare</strong>, then use <strong>History</strong> to review the run and per-program versions.</li>
+      </ol>
+      <div class="manual-callout safe"><strong>Normal safety path:</strong> Apply Fix backs up the original program first. The backup is kept in a write-once <code>_migrate_original</code> folder beside the programs.</div>
+    </section>
+
+    <section class="manual-section" id="screen-layout">
+      <h2>Screen layout <a class="anchor-link" href="#screen-layout">#</a></h2>
+      <div class="manual-grid">
+        <div class="manual-card"><h3>Left · Programs</h3><p>Select the folder, search programs, select multiple programs, and see each program's current change count.</p></div>
+        <div class="manual-card"><h3>Center · Workspace</h3><p>Work in Rules, Fixed SAS, Fix Compare, and History for the currently selected program.</p></div>
+        <div class="manual-card"><h3>Right · Details</h3><p>See program summary, fix counts, rules applied, and recent versions at a glance.</p></div>
+        <div class="manual-card"><h3>Top · Actions</h3><p>Save, Apply Fix, import/export rules, download updated programs/summary, profile, and sign out.</p></div>
+      </div>
+    </section>
+
+    <section class="manual-section" id="folder-selection">
+      <h2>Folder selection <a class="anchor-link" href="#folder-selection">#</a></h2>
+      <p>Click <strong>Folder</strong> in the upper-left program rail. Migrate Studio reads <code>*.sas</code> files recursively, ignores migration output/backup folders, lists the programs by relative path, and selects the first loaded program.</p>
+      <p>If the selected folder contains the canonical <code>Migrate_Studio_Rules.xlsx</code>, that rule book is loaded automatically. You can still use <strong>Import Rules</strong> to load a different workbook.</p>
+      <div class="manual-callout"><strong>Search:</strong> use the left search field to filter by folder, program, or both. A folder term can be combined with a program term to narrow a large study quickly.</div>
+
+      <h3 id="reopening-migrated-folder">Reopening a previously migrated folder <a class="anchor-link" href="#reopening-migrated-folder">#</a></h3>
+      <p>When the folder already contains <code>_migrate_original</code> backups, Migrate Studio reads matching <code>history.json</code> records for the selected root folder and reconstructs the previous migration state. It uses the saved program path, rule applications, line-level details, and prior run information to restore the original-versus-fixed relationship.</p>
+      <p>The left program list then shows each recovered change count, and selecting that program restores the information needed by <strong>Fix Compare</strong>. A recorded <strong>Revert</strong> clears the corresponding applied state, so reverted programs are not treated as still migrated.</p>
+    </section>
+
+    <section class="manual-section" id="program-list">
+      <h2>Program list <a class="anchor-link" href="#program-list">#</a></h2>
+      <p>The left rail is both a navigator and an Apply Fix selection list. Click a program name to make it the active program; tick individual programs to run the same selected rule set across several files.</p>
+      <div class="manual-table-wrap"><table class="manual-table"><thead><tr><th>Control</th><th>Purpose</th></tr></thead><tbody>
+        <tr><td><strong>Select All / Deselect All</strong></td><td>Selects every program currently shown by the search/filter; once all are selected, the button changes to Deselect All and clears them.</td></tr>
+        <tr><td><strong>Program checkbox</strong></td><td>Includes that program in a multi-program Apply Fix run.</td></tr>
+        <tr><td><strong>Number beside program</strong></td><td>Number of recovered or currently applied line changes/fix details for that program.</td></tr>
+        <tr><td><strong>Search</strong></td><td>Filters the tree by folder name, program name, or both.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="manual-section" id="migration-name">
+      <h2>Migration name <a class="anchor-link" href="#migration-name">#</a></h2>
+      <p>Click the editable label beside <strong>Migrate Studio</strong> in the top navigation bar to set the migration name. The name is used by the application when identifying the migration in fixed-program header information.</p>
+    </section>
+
+    <section class="manual-section" id="rules">
+      <h2>Rules <a class="anchor-link" href="#rules">#</a></h2>
+      <p>The <strong>Rules</strong> tab displays the <code>Rules</code> sheet from the loaded rule workbook. Each runnable row includes its Rule ID, short title, category, description, and a tick that determines whether the rule will run.</p>
+      <ul>
+        <li>Ticked rules run <strong>top to bottom</strong> when Apply Fix is executed.</li>
+        <li>Documentation-only rows that contain no executable pattern cannot be selected.</li>
+        <li>Rules requiring an unresolved parameter are protected from running until they are valid.</li>
+        <li>The rule filter narrows the visible rule list without changing the underlying program selection.</li>
+      </ul>
+      <p><strong>Import Rules</strong> loads another workbook. <strong>Export Rules</strong> writes the currently loaded workbook back out for review or reuse.</p>
+    </section>
+
+    <section class="manual-section" id="apply-fix">
+      <h2>Apply Fix <a class="anchor-link" href="#apply-fix">#</a></h2>
+      <p>Apply Fix runs the ticked, in-scope rules against the active program or against the checked program set in the left rail. When changes are found, the fixed text is written in place when the selected folder is writable, and the run is recorded in migration history.</p>
+      <p>Programs already marked as applied by their backup/history state are skipped. This prevents a previously completed in-place migration from being applied again unintentionally.</p>
+
+      <h3 id="backup-safety">Backup safety <a class="anchor-link" href="#backup-safety">#</a></h3>
+      <p>Before the first in-place write in a directory, Migrate Studio creates <code>_migrate_original</code> in that directory and copies its SAS programs into the backup folder. Existing backup files are never overwritten.</p>
+      <div class="manual-callout warning"><strong>Modified dates:</strong> when the server can identify the selected folder directly, backup copies retain the original modified dates. If folder resolution falls back to a browser copy, the backup contents remain correct but the backup file timestamp may be the current date.</div>
+    </section>
+
+    <section class="manual-section" id="fixed-sas">
+      <h2>Fixed SAS <a class="anchor-link" href="#fixed-sas">#</a></h2>
+      <p>The <strong>Fixed SAS</strong> tab shows the current fixed program with SAS syntax coloring. Use the view controls to expand or fullscreen the code panel when reviewing large programs.</p>
+      <div class="manual-table-wrap"><table class="manual-table"><tbody>
+        <tr><th>Apply Fix</th><td>Run the currently selected rules against the active/selected program set.</td></tr>
+        <tr><th>Reload</th><td>Reload the current fixed view from the program state.</td></tr>
+        <tr><th>Copy</th><td>Copy the fixed SAS text to the clipboard.</td></tr>
+        <tr><th>Download</th><td>Download the current fixed program.</td></tr>
+        <tr><th>Download Updated Programs</th><td>Download the set of updated programs as a ZIP.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="manual-section" id="fix-compare">
+      <h2>Fix Compare <a class="anchor-link" href="#fix-compare">#</a></h2>
+      <p><strong>Fix Compare</strong> displays the original program on the left and the fixed program on the right. Added, deleted, and modified lines are visually marked, and the two panes scroll together.</p>
+      <ul>
+        <li><strong>Changes only</strong> hides unchanged context so you can focus on migration edits.</li>
+        <li>The version selector lets you choose the comparison reference when multiple versions are available.</li>
+        <li><strong>Previous</strong>/<strong>Next</strong> moves between modified lines. For a single modified line, the modified-count link jumps directly to it.</li>
+        <li>When an already migrated folder is reopened, the original is recovered from <code>_migrate_original</code> and the prior fixed/change details are reconstructed from <code>history.json</code>.</li>
+      </ul>
+    </section>
+
+    <section class="manual-section" id="history">
+      <h2>History <a class="anchor-link" href="#history">#</a></h2>
+      <p>The <strong>History</strong> tab contains two independent views: migration-wide run history and the version history of the selected program.</p>
+
+      <h3 id="migration-history">Migration History <a class="anchor-link" href="#migration-history">#</a></h3>
+      <p>Migration History reads <code>history.json</code> from your per-user data folder, which is printed when Migrate Studio starts, and summarizes Apply Fix/Revert activity by root folder, program, rule, user, and run. Search and filter controls let you narrow the view, and <strong>Download</strong> exports the history information.</p>
+      <p>Each successful Apply Fix run records the root folder, relevant subfolder/program paths, rule applications, changed-line details, totals, user/profile information, rule book, and timestamps used by the dashboard and folder-reopen workflow.</p>
+
+      <h3 id="this-program">This Program <a class="anchor-link" href="#this-program">#</a></h3>
+      <p>This Program shows the selected program's versions, newest first. Apply Fix, Revert, and Restore add version records rather than silently rewriting the history trail.</p>
+      <p>Select a version to review it or choose <strong>Restore</strong>. Restore makes that version the current fixed state and writes it in place when the folder is writable.</p>
+    </section>
+
+    <section class="manual-section" id="revert">
+      <h2>Revert <a class="anchor-link" href="#revert">#</a></h2>
+      <p><strong>Revert</strong> restores the active program from its matching <code>_migrate_original</code> backup. The action is recorded in history and the program's applied marker/backup entry is cleared so Apply Fix can be run again if needed.</p>
+      <div class="manual-callout warning"><strong>Revert writes to the live program.</strong> It requires write access to the selected folder and asks for confirmation before restoring the original.</div>
+    </section>
+
+    <section class="manual-section" id="save">
+      <h2>Save <a class="anchor-link" href="#save">#</a></h2>
+      <p><strong>Save</strong> writes the current fixed state back to the live program files. Because Apply Fix already writes in place in the normal workflow, Save is primarily useful after restoring an older version or when the application reports unsaved restored state.</p>
+      <p>The top-bar Save action also advertises the standard <strong>Ctrl/Cmd+S</strong> shortcut.</p>
+    </section>
+
+    <section class="manual-section" id="downloads">
+      <h2>Downloads <a class="anchor-link" href="#downloads">#</a></h2>
+      <div class="manual-table-wrap"><table class="manual-table"><thead><tr><th>Download</th><th>Contents</th></tr></thead><tbody>
+        <tr><td><strong>Download Updated Programs</strong></td><td>ZIP containing the updated SAS programs.</td></tr>
+        <tr><td><strong>Download Update Summary</strong></td><td>Excel workbook summarizing program-level changes, line-level detail, and rule information.</td></tr>
+        <tr><td><strong>Fixed SAS · Download</strong></td><td>The currently selected fixed SAS program.</td></tr>
+        <tr><td><strong>History · Download</strong></td><td>Migration history data from the run-history view.</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="manual-section" id="profile">
+      <h2>Profile <a class="anchor-link" href="#profile">#</a></h2>
+      <p>Open the <strong>⋯</strong> menu and choose <strong>Profile</strong> to set your name and email. The profile name is used as the operator/author in migration history and fixed-program header information.</p>
+    </section>
+
+    <section class="manual-section" id="browser-modes">
+      <h2>Browser & folder modes <a class="anchor-link" href="#browser-modes">#</a></h2>
+      <div class="manual-table-wrap"><table class="manual-table"><thead><tr><th>Mode</th><th>Behavior</th></tr></thead><tbody>
+        <tr><td><strong>Browser mode · Chrome/Edge</strong></td><td>Browser can read and, when permission is granted, write the chosen local/mapped folder in place.</td></tr>
+        <tr><td><strong>Browser mode · Firefox/Safari</strong></td><td>Read-only folder fallback. Fixes can be reviewed, but updated programs are downloaded rather than written back directly.</td></tr>
+        <tr><td><strong>Server folder mode</strong></td><td>R/Shiny reads and writes programs on allowlisted server roots. The same front-end workflow is used, while server-side file operations preserve the deployment's file controls.</td></tr>
+      </tbody></table></div>
+      <p>If Migrate Studio cannot obtain write access, it displays an amber read-only banner rather than waiting until Save or Revert to report the limitation.</p>
+    </section>
+
+    <section class="manual-section" id="troubleshooting">
+      <h2>Troubleshooting <a class="anchor-link" href="#troubleshooting">#</a></h2>
+      <div class="manual-two-col">
+        <div class="manual-card"><h3>Folder loads read-only</h3><p>Use Chrome/Edge in browser-folder mode or use the server-folder deployment. If prompted, grant the application write permission to the selected folder.</p></div>
+        <div class="manual-card"><h3>No rules loaded</h3><p>Confirm the folder contains <code>Migrate_Studio_Rules.xlsx</code> or use Import Rules to select the correct workbook.</p></div>
+        <div class="manual-card"><h3>Apply Fix skips a program</h3><p>The program may already be marked as applied by its backup/history state. Review History or Revert before intentionally reapplying.</p></div>
+        <div class="manual-card"><h3>Prior changes do not reappear</h3><p>Confirm the program has a matching <code>_migrate_original</code> backup and that <code>history.json</code> in the startup data folder contains records for the same root folder and relative program path.</p></div>
+        <div class="manual-card"><h3>Fix Compare has no changes</h3><p>Confirm a fix was applied or recovered from history and that the original backup can be read for the selected program.</p></div>
+        <div class="manual-card"><h3>Revert is unavailable</h3><p>Revert requires a readable original backup and write access to the live program folder.</p></div>
+      </div>
+    </section>
+
+    <section class="manual-section" id="deep-links">
+      <h2>Direct section links <a class="anchor-link" href="#deep-links">#</a></h2>
+      <p>Every functional section has a stable HTML anchor. Append the anchor to <code>user_manual.html</code> when linking from the application, release notes, support documentation, or an email.</p>
+      <span class="manual-link-example">user_manual.html#folder-selection</span>
+      <span class="manual-link-example">user_manual.html#reopening-migrated-folder</span>
+      <span class="manual-link-example">user_manual.html#apply-fix</span>
+      <span class="manual-link-example">user_manual.html#fix-compare</span>
+      <span class="manual-link-example">user_manual.html#history</span>
+      <span class="manual-link-example">user_manual.html#revert</span>
+    </section>
+  </main>
+</div>
+<footer class="manual-footer"><span class="mono">Migrate Studio User Manual</span> · © 2026 Meta-Xceed, Inc.</footer>
+<script>
+document.querySelectorAll('.manual-top a[href="./"]').forEach(function (a) {
+  a.addEventListener('click', function (e) {
+    if (window.history.length > 1) return;
+    e.preventDefault();
+    window.close();
+    setTimeout(function () { location.href = './'; }, 150);
+  });
+});
+</script>
+</body>
+</html>

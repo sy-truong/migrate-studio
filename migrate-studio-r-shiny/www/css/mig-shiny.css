@@ -1,0 +1,23 @@
+/* Migrate Studio (Shiny edition) -- the server folder picker, built from the
+   app's own dialog tokens.
+ * Migrate Studio
+ *
+ * Copyright (c) 2026 Meta-Xceed, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+*/
+.server-folder-dialog{max-width:640px}
+.server-folder-dialog .mini-select{width:100%;margin:4px 0 8px}
+.server-folder-list{
+  display:flex;flex-direction:column;gap:2px;max-height:46vh;overflow:auto;
+  margin-bottom:16px;padding:6px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface-3);
+}
+.server-folder-item{
+  text-align:left;background:none;border:0;border-radius:6px;padding:6px 8px;
+  font:inherit;font-size:13px;color:var(--ink);cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;
+}
+.server-folder-item:hover{background:var(--tint-violet)}
+.server-folder-item:focus-visible{outline:2px solid var(--violet);outline-offset:-2px}
+/* Shiny adds a busy class while R works; keep the app's own look. */
+html.shiny-busy{cursor:progress}

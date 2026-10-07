@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+Migrate Studio
+
+Copyright (c) 2026 Meta-Xceed, Inc.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Choose a migration folder</title>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/migrate-studio.css">
+</head>
+<body style="padding:24px">
+  <p>Migrate Studio runs inside a frame on this portal, and browsers do not allow a
+     framed page to open a folder picker. Choose the migration folder here instead.</p>
+  <button id="pick" type="button" class="btn">Choose folder&hellip;</button>
+  <p id="note" class="mono"></p>
+<script>
+document.getElementById('pick').addEventListener('click', function () {
+  window.showDirectoryPicker({ id: 'migratestudio', mode: 'readwrite' })
+    .then(function (handle) {
+      return handle.requestPermission({ mode: 'readwrite' })
+        .then(function () { return handle; });
+    })
+    .then(function (handle) {
+      window.opener.postMessage({ type: 'migrate-studio-folder', handle: handle },
+                                window.location.origin);
+      window.close();
+    })
+    .catch(function (err) {
+      if (err && err.name === 'AbortError') { window.close(); return; }
+      document.getElementById('note').textContent = err.message;
+    });
+});
+</script>
+</body>
+</html>

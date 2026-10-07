@@ -1,0 +1,645 @@
+<!doctype html>
+<!--
+Migrate Studio
+
+Copyright (c) 2026 Meta-Xceed, Inc.
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Shiny: jQuery and shiny.js are injected here. -->
+{{ headContent() }}
+<script>window.MIGRATE_STUDIO_FOLDER_MODE = "{{ folder_mode }}";</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Matches the pattern the app keeps this at: "Migrate Studio - <label>", where the
+     label is the editable one in the nav. Set here so the tab reads right
+     before any script runs; migrate-studio.js takes it over from there. -->
+<title>Migrate Studio</title>
+<meta name="description" content="Migrate Studio: point it at a folder of SAS programs, apply a rule book of migration fixes, and compare the fixed program against the original with version history behind every fix.">
+
+<link rel="icon" href="favicon.svg?v=2" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-16.png?v=2" type="image/png" sizes="16x16">
+<link rel="shortcut icon" href="favicon.ico?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="manifest" href="manifest.webmanifest?v=1">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Theme follows the clock in Pacific time, not the visitor's OS preference.
+     This runs inline in <head>, synchronously, so data-theme is on <html>
+     before the first paint — loading it with the rest of the JS at the end of
+     <body> would show a light flash before flipping to dark. Same contract as
+     the rest of the site. -->
+<script>
+(function () {
+  'use strict';
+  var DAY_START = 6;    // light from 06:00 PT…
+  var DAY_END   = 18;   // …until 17:59 PT
+
+  function pacificHour(now) {
+    now = now || new Date();
+    try {
+      return parseInt(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false
+      }).format(now), 10) % 24;
+    } catch (e) {
+      // No IANA time-zone data: fall back to a fixed UTC-8. Off by an hour
+      // through daylight saving, which moves the switch, never breaks it.
+      return (now.getUTCHours() + 16) % 24;
+    }
+  }
+
+  function themeForHour(h) { return (h >= DAY_START && h < DAY_END) ? 'light' : 'dark'; }
+
+  function apply() {
+    var theme = themeForHour(pacificHour());
+    var root = document.documentElement;
+    if (root.getAttribute('data-theme') !== theme) root.setAttribute('data-theme', theme);
+    return theme;
+  }
+
+  apply();
+
+  window.MXTheme = {
+    apply: apply, themeForHour: themeForHour, pacificHour: pacificHour,
+    DAY_START: DAY_START, DAY_END: DAY_END
+  };
+
+  if (window.setInterval) window.setInterval(apply, 60000);
+})();
+</script>
+
+<link rel="stylesheet" href="css/migrate-studio.css">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/mig-shiny.css">
+</head>
+<body>
+<!-- ============================== top bar ============================== -->
+<nav>
+  <div class="nav-inner">
+    <button type="button" class="logo" id="btnAbout"
+            aria-label="About Migrate Studio" title="About Migrate Studio">
+      <img class="logo-img" src="favicon.svg?v=2" width="34" height="34"
+           alt="" aria-hidden="true">
+      <span class="logo-app">Migrate Studio</span>
+    </button>
+
+    <!-- The product name above is fixed; this is the part that is yours to
+         name. It sits outside the logo link so that clicking to rename cannot
+         navigate. The button is what shows; the input replaces it while
+         editing, which keeps the resting state a plain focusable control
+         rather than a contenteditable span. -->
+    <div class="nav-label-wrap">
+      <span class="nav-label-sep" aria-hidden="true">/</span>
+      <button type="button" class="nav-label" id="navLabel"
+              title="Click to edit Migration Name">Migration Name</button>
+      <input type="text" class="nav-label-input" id="navLabelInput" hidden
+             maxlength="60" spellcheck="false" autocomplete="off"
+             aria-label="Migration Name — used in fixed program headers">
+    </div>
+
+    <div class="nav-state">
+      <span id="saveState" class="save-state mono" title="Where your fixes stand">loading…</span>
+    </div>
+
+    <div class="nav-cta">
+      <button class="btn btn-sm btn-dark" id="btnSave" type="button"
+              title="Write the fixed programs to disk and record a version (Ctrl/Cmd+S)">Save</button>
+      <button class="btn btn-sm btn-primary" id="btnApplyFix" type="button"
+              title="Run the rule book against the selected program">Apply&nbsp;Fix</button>
+
+      <div class="menu-wrap">
+        <button class="btn btn-sm btn-icon" id="btnFileMenu" type="button"
+                aria-haspopup="true" aria-expanded="false" title="File actions">⋯</button>
+        <div class="menu" id="fileMenu" role="menu" hidden>
+          <button type="button" role="menuitem" data-action="import-rules">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v10"></path><path d="m8 9 4 4 4-4"></path><path d="M5 14v5h14v-5"></path></svg>
+            </span>
+            <span class="menu-label">Import Rules</span>
+          </button>
+          <button type="button" role="menuitem" data-action="export-rules">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 13V3"></path><path d="m8 7 4-4 4 4"></path><path d="M5 14v5h14v-5"></path></svg>
+            </span>
+            <span class="menu-label">Export Rules</span>
+          </button>
+          <button type="button" role="menuitem" data-action="download-fix">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"></path><path d="M14 2v5h5"></path><path d="m10 13-2 2 2 2"></path><path d="m14 13 2 2-2 2"></path></svg>
+            </span>
+            <span class="menu-label">Download Updated Programs</span>
+          </button>
+          <button type="button" role="menuitem" data-action="download-summary"
+                  title="Excel workbook: Summary, Detail and Rules sheets">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"></path><path d="M14 2v5h5"></path><path d="M8 11h8"></path><path d="M8 15h8"></path><path d="M8 19h5"></path></svg>
+            </span>
+            <span class="menu-label">Download Update Summary</span>
+          </button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-action="user-manual"
+                  title="Opens in a new browser tab">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2.5z"></path><path d="M8 7h8"></path><path d="M8 11h6"></path></svg>
+            </span>
+            <span class="menu-label">User Manual</span>
+          </button>
+          <div class="menu-sep"></div>
+          <button id="menuUserProfile" type="button" role="menuitem"
+                  data-action="author">
+            <span class="menu-avatar" id="menuUserProfileAvatar"
+                  aria-hidden="true">U</span>
+            <span class="menu-label" id="menuUserProfileLabel">Profile</span>
+          </button>
+          <div class="menu-sep"></div>
+          <button type="button" role="menuitem" data-action="logout">
+            <span class="menu-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+            </span>
+            <span class="menu-label">Sign Out</span>
+          </button>
+        </div>
+      </div>
+
+      <button class="nav-burger" aria-label="Menu" aria-expanded="false"
+              aria-controls="navRail"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</nav>
+
+<!-- Rule-book picker, and the read-only folder fallback for browsers without
+     the File System Access API. -->
+<input type="file" id="rulesInput" hidden
+       accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+<input type="file" id="folderInput" hidden webkitdirectory directory multiple>
+
+<!-- Read-only folder mode: a setup limitation, surfaced when the folder is
+     opened rather than at Save. -->
+<div class="banner banner-warn" id="fsBanner" hidden>
+  <span class="banner-mark mono" id="fsBannerMark">read-only folder</span>
+  <div class="banner-body">
+    <span class="banner-text" id="fsBannerText"></span>
+    <ul class="banner-steps mono" id="fsBannerSteps" hidden></ul>
+  </div>
+  <div class="banner-actions">
+    <button class="btn btn-xs" id="btnDismissFs" type="button">Continue read-only</button>
+  </div>
+</div>
+
+<div class="banner" id="modeBanner" hidden>
+  <span class="banner-mark mono">no folder</span>
+  <span class="banner-text" id="modeBannerText"></span>
+  <button class="btn btn-xs" id="btnReconnectFolder" type="button" hidden>Reconnect</button>
+  <button class="btn btn-xs" id="btnDismissBanner" type="button">Dismiss</button>
+</div>
+
+<div class="load-state" id="loadState">
+  <span class="status-spinner" aria-hidden="true"></span> Starting Migrate Studio…
+</div>
+
+<!-- ============================== app frame ============================ -->
+<div class="app-frame" id="appFrame" hidden>
+
+  <!-- ----------------------- left: program navigator ------------------ -->
+  <aside class="nav-rail" id="navRail" aria-label="Programs">
+    <div class="rail-head">
+      <div class="rail-title">
+        <button
+          type="button"
+          class="rail-select-link"
+          id="btnSelectAll"
+          aria-pressed="false"
+          title="Select all programs">Select All</button>
+        <span class="rail-eyebrow">Programs</span>
+      </div>
+      <button class="btn btn-xs" id="btnPickFolder" type="button"
+              title="Choose a folder of SAS programs">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+        </svg>
+        <span>Folder</span>
+      </button>
+    </div>
+
+    <div class="rail-controls">
+      <input type="search" id="programFilter" class="rail-search"
+             placeholder="Search folder or program…"
+             title="Type a folder (adam), a program (adsl), or both (adam ae). End with / to match the folder exactly."
+             aria-label="Search programs by folder or file name">
+    </div>
+
+    <div class="rail-folder-path mono" id="folderPath" hidden></div>
+
+    <nav class="rail-tree" id="railTree" aria-label="Program list"></nav>
+
+    <div class="rail-foot">
+      <div class="rail-stat"><span class="k mono">programs</span><span class="v mono" id="statPrograms">0</span></div>
+      <div class="rail-stat"><span class="k mono">fixed</span><span class="v mono" id="statFixed">0</span></div>
+      <div class="rail-stat"><span class="k mono">rules</span><span class="v mono" id="statRules">0</span></div>
+    </div>
+  </aside>
+
+  <!-- ----------------------- centre: the workspace -------------------- -->
+  <main class="work" id="work">
+
+    <header class="work-head">
+      <div class="work-title">
+        <div class="work-eyebrow" id="workEyebrow">Migration SAS Programs</div>
+        <h1 id="workTitle">—</h1>
+        <div class="work-meta" id="workMeta"></div>
+      </div>
+      <div class="work-actions">
+        <button class="btn btn-xs" id="btnApplyFixThis" type="button">Apply Fix</button>
+        <button class="btn btn-xs btn-danger" id="btnRevertProgram" type="button">Revert</button>
+      </div>
+    </header>
+
+    <div class="seg tab-seg" role="tablist" id="editorTabs">
+      <button class="seg-btn is-on" role="tab" data-tab="rules" aria-selected="true">Rules</button>
+      <button class="seg-btn" role="tab" data-tab="fixed" aria-selected="false">Fixed SAS</button>
+      <button class="seg-btn" role="tab" data-tab="compare" aria-selected="false">Fix Compare</button>
+      <button class="seg-btn" role="tab" data-tab="history" aria-selected="false">History</button>
+    </div>
+
+    <!-- the rule book, straight out of Migrate_Studio_Rules.xlsx -->
+    <section class="tab-panel is-on" data-panel="rules">
+      <div class="strip">
+        <span class="mono strip-path" id="rulesPath">Migrate_Studio_Rules.xlsx</span>
+        <div class="strip-actions">
+          <input type="search" id="ruleFilter" class="mini-search"
+                 placeholder="Filter rules…" aria-label="Filter rules">
+          <button class="btn btn-xs" id="btnImportRules" type="button">
+            <span class="file-type-icon file-type-excel" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 3h9l4.5 4.5V21H5z"/>
+                <path d="M14 3v4.5h4.5"/>
+                <path d="M9.3 12.6l5 6.2M14.3 12.6l-5 6.2"/>
+              </svg>
+            </span>
+            <span>Import Rules</span>
+          </button>
+          <button class="btn btn-xs" id="btnExportRules" type="button">
+            <span class="file-type-icon file-type-excel" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 3h9l4.5 4.5V21H5z"/>
+                <path d="M14 3v4.5h4.5"/>
+                <path d="M9.3 12.6l5 6.2M14.3 12.6l-5 6.2"/>
+              </svg>
+            </span>
+            <span>Export Rules</span>
+          </button>
+        </div>
+      </div>
+      <div id="rulesStatus" class="strip-status"></div>
+      <div class="grid-scroll" id="rulesGridWrap">
+        <table class="row-grid rules-table" id="rulesGrid">
+          <thead id="rulesGridHead"></thead>
+          <tbody id="rulesGridBody"></tbody>
+        </table>
+      </div>
+      <p class="grid-hint mono">
+        Ticked rules run, top to bottom, when you press Apply Fix · a rule with
+        no Before pattern is documentation and cannot be ticked
+      </p>
+    </section>
+
+    <!-- the fixed program -->
+    <section class="tab-panel" data-panel="fixed">
+      <div class="strip">
+        <span class="mono strip-path" id="fixedPath">—</span>
+        <div class="strip-actions">
+          <button class="btn btn-xs" id="btnApplyFixTab" type="button">Apply Fix</button>
+          <button class="btn btn-xs" id="btnReloadFixed" type="button">Reload</button>
+          <button class="btn btn-xs" id="btnCopyFixed" type="button">Copy</button>
+          <button class="btn btn-xs" id="btnDownloadFixed" type="button">Download</button>
+        </div>
+      </div>
+      <div class="sas-panel" id="fixedPanel">
+        <div class="sas-panel-head" id="fixedPanelHeader">
+          <div id="fixedStatus" class="strip-status"></div>
+          <div class="sas-view-controls" aria-label="Fixed SAS view controls">
+            <button class="sas-icon-btn" id="btnExpandFixedPanel" type="button"
+                    aria-label="Expand panel" aria-pressed="false"
+                    title="Expand panel"></button>
+            <button class="sas-icon-btn" id="btnFullscreenFixedPanel" type="button"
+                    aria-label="Enter fullscreen" aria-pressed="false"
+                    title="Enter fullscreen"></button>
+            <button class="sas-icon-btn" id="btnCollapseFixedPanel" type="button"
+                    aria-label="Collapse viewer" aria-pressed="false"
+                    title="Collapse viewer"></button>
+          </div>
+        </div>
+        <div class="code-view sas-code-view" id="fixedCodeView"><pre class="mono" id="fixedCode"></pre></div>
+      </div>
+      <div class="tab-download-actions">
+        <button class="btn btn-sm" id="btnDownloadFixScreen" type="button">
+          Download Updated Programs
+        </button>
+      </div>
+    </section>
+
+    <!-- original against fixed, side by side -->
+    <section class="tab-panel" data-panel="compare">
+      <div class="strip">
+        <span class="mono strip-path" id="comparePath">—</span>
+        <div class="strip-actions">
+          <label class="mini-check">
+            <input type="checkbox" id="cmpChangesOnly"> <span>Changes only</span>
+          </label>
+          <select id="cmpVersion" class="mini-select mono"
+                  aria-label="Compare against"></select>
+        </div>
+      </div>
+      <div class="sas-panel cmp-panel" id="comparePanel">
+        <div class="sas-panel-head" id="comparePanelHeader">
+          <div id="compareStatus" class="strip-status cmp-status">
+            <span class="cmp-nav">
+              <button class="btn btn-xs cmp-nav-btn" id="btnPrevModified"
+                      type="button" hidden
+                      aria-label="Previous modified line"
+                      title="Previous modified line (Alt+Up)">&lsaquo; Previous</button>
+              <span class="cmp-nav-label" id="cmpModifiedLabel"
+                    aria-live="polite">&mdash;</span>
+              <button class="btn btn-xs cmp-nav-btn" id="btnNextModified"
+                      type="button" hidden
+                      aria-label="Next modified line"
+                      title="Next modified line (Alt+Down)">Next &rsaquo;</button>
+            </span>
+            <span class="cmp-status-rest" id="cmpOtherCounts"></span>
+          </div>
+          <div class="sas-view-controls" aria-label="Fix Compare view controls">
+            <button class="sas-icon-btn" id="btnExpandComparePanel" type="button"
+                    aria-label="Expand panel" aria-pressed="false"
+                    title="Expand panel"></button>
+            <button class="sas-icon-btn" id="btnFullscreenComparePanel" type="button"
+                    aria-label="Enter fullscreen" aria-pressed="false"
+                    title="Enter fullscreen"></button>
+          </div>
+        </div>
+        <div class="cmp-split">
+          <div class="cmp-pane">
+            <div class="cmp-pane-head">
+              <span>Original</span>
+              <span class="cmp-tag mono" id="cmpLeftTag">—</span>
+            </div>
+            <div class="code-view cmp-view" id="cmpLeftView"><pre class="mono" id="cmpLeft"></pre></div>
+          </div>
+          <div class="cmp-pane">
+            <div class="cmp-pane-head">
+              <span>Fixed</span>
+              <span class="cmp-tag mono" id="cmpRightTag">—</span>
+            </div>
+            <div class="code-view cmp-view" id="cmpRightView"><pre class="mono" id="cmpRight"></pre></div>
+          </div>
+        </div>
+      </div>
+      <div class="cmp-legend">
+        <span><span class="sw add" aria-hidden="true"></span>Added</span>
+        <span><span class="sw del" aria-hidden="true"></span>Deleted</span>
+        <span><span class="sw change" aria-hidden="true"></span>Modified</span>
+        <span class="mono" id="cmpCounts"></span>
+      </div>
+    </section>
+
+    <!-- migration-wide history plus every fix applied to this program -->
+    <section class="tab-panel" data-panel="history">
+      <div class="fgroups">
+        <section class="fgroup is-open history-panel" id="historyPanel">
+          <button class="fgroup-head" type="button" aria-expanded="true">
+            <span class="fgroup-chevron">▸</span>
+            <span class="fgroup-title">History</span>
+          </button>
+          <div class="history-view-controls" aria-label="Fix History view controls">
+            <button class="sas-icon-btn" id="btnExpandHistoryPanel" type="button"
+                    aria-label="Expand panel" aria-pressed="false"
+                    title="Expand panel"></button>
+            <button class="sas-icon-btn" id="btnFullscreenHistoryPanel" type="button"
+                    aria-label="Enter fullscreen" aria-pressed="false"
+                    title="Enter fullscreen"></button>
+          </div>
+          <div class="fgroup-body history-group-body">
+            <div class="seg sub-seg" role="tablist" id="historySubTabs">
+              <button class="seg-btn is-on" role="tab" data-subtab="runs"
+                      aria-selected="true">Migration History</button>
+              <button class="seg-btn" role="tab" data-subtab="program"
+                      aria-selected="false">This Program</button>
+            </div>
+
+            <div class="history-sub" data-subtab="runs">
+              <div class="strip">
+                <span class="mono strip-path" id="runHistoryStatus">—</span>
+                <div class="strip-actions">
+                  <input type="search" id="runHistoryFilter" class="mini-search"
+                         placeholder="Search program or rule…"
+                         aria-label="Search migration history">
+                  <select id="runHistoryUser" class="mini-select"
+                          aria-label="Filter migration history by user">
+                    <option value="@me">My runs</option>
+                    <option value="">All users</option>
+                  </select>
+                  <select id="runHistoryFolderFilter" class="mini-select"
+                          aria-label="Filter migration history by folder">
+                    <option value="">All folders</option>
+                  </select>
+                  <button class="btn btn-xs" id="btnDownloadRunHistory"
+                          type="button">Download</button>
+                </div>
+              </div>
+              <div id="runHistoryNote" class="history-note" hidden></div>
+              <div class="dash" id="runHistoryDash"></div>
+              <div class="strip history-list-search">
+                <input type="search" id="historyProgramSearch" class="mini-search"
+                       placeholder="Search programs…"
+                       title="Type part of a program or folder name (adsl), or both (adam ae). End a term with / to match a folder exactly."
+                       aria-label="Search programs in migration history"
+                       aria-controls="runHistoryGroups">
+                <span class="mono strip-path" id="historyProgramSearchCount"
+                      aria-live="polite"></span>
+              </div>
+              <div class="fgroups run-history-groups" id="runHistoryGroups"></div>
+            </div>
+
+            <div class="history-sub" data-subtab="program" hidden>
+              <div class="strip">
+                <span class="mono strip-path" id="historyStatus">—</span>
+                <div class="strip-actions">
+                  <input type="search" id="historyFilter" class="mini-search"
+                         placeholder="Search versions…" aria-label="Search versions">
+                  <button class="btn btn-xs" id="btnClearHistory" type="button">Clear</button>
+                </div>
+              </div>
+              <div class="history-split">
+                <div class="history-list" id="historyList"></div>
+                <div class="history-detail" id="historyDetail">
+                  <div class="detail-title">Pick a version to view or compare</div>
+                  <p class="detail-note">
+                    Every Apply Fix records a version of the program. Reverting adds
+                    a new version rather than rewriting history, so nothing you
+                    revert away from is lost.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- ----------------------- right: contextual rail ------------------- -->
+  <aside class="context-rail" id="contextRail" aria-label="Details">
+
+    <!-- program summary -->
+    <section class="ctx-card" id="summaryCard">
+      <header class="ctx-head">
+        <span class="ctx-eyebrow">Summary</span>
+        <span class="ctx-badge" id="summaryBadge">no program</span>
+      </header>
+      <div class="ctx-body">
+        <dl class="ctx-lines" id="summaryLines"></dl>
+      </div>
+    </section>
+
+    <!-- how many fixes -->
+    <section class="ctx-card">
+      <header class="ctx-head">
+        <span class="ctx-eyebrow">Fixes</span>
+        <span class="ctx-badge mono" id="fixBadge">—</span>
+      </header>
+      <div class="ctx-body">
+        <dl class="ctx-lines" id="fixLines"></dl>
+      </div>
+    </section>
+
+    <!-- which rules fired -->
+    <section class="ctx-card">
+      <header class="ctx-head">
+        <span class="ctx-eyebrow">Rules applied</span>
+        <span class="ctx-badge mono" id="ruleBadge">—</span>
+      </header>
+      <div class="ctx-body">
+        <ul class="rule-hits" id="ruleHits">
+          <li class="issue-empty">No fix applied yet.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- versions at a glance -->
+    <section class="ctx-card">
+      <header class="ctx-head">
+        <span class="ctx-eyebrow">Versions</span>
+        <span class="ctx-badge mono" id="versionBadge">—</span>
+      </header>
+      <div class="ctx-body">
+        <ul class="mini-versions" id="miniVersions">
+          <li class="issue-empty">No versions yet.</li>
+        </ul>
+        <button class="btn btn-xs" id="btnOpenHistory" type="button">Open history</button>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<!-- ============================== dialogs ============================== -->
+<dialog class="dialog" id="authorDialog">
+  <form method="dialog" id="authorForm">
+    <h2>Profile</h2>
+    <p class="dialog-note">
+      User name to be inserted into fixed program headers.
+    </p>
+    <div class="field">
+      <label for="authorName">Name</label>
+      <input type="text" id="authorName" autocomplete="name">
+    </div>
+    <div class="field">
+      <label for="authorEmail">Email</label>
+      <input type="text" id="authorEmail" autocomplete="email">
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-sm" type="button" data-close>Cancel</button>
+      <button class="btn btn-sm btn-dark" type="submit">Save profile</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dialog" id="confirmDialog">
+  <form method="dialog" id="confirmForm">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p class="dialog-note" id="confirmBody"></p>
+    <div class="dialog-actions">
+      <button class="btn btn-sm" type="button" data-close>Cancel</button>
+      <button class="btn btn-sm btn-dark" type="submit" id="confirmOk">Continue</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dialog about-dialog" id="aboutDialog">
+  <form method="dialog" id="aboutForm">
+    <div class="about-brand">
+      <img class="about-logo" src="favicon.svg?v=2" width="52" height="52"
+           alt="" aria-hidden="true">
+      <h2 class="about-title">Migrate Studio</h2>
+    </div>
+    <div class="about-body">
+      <span class="about-badge" id="aboutVersion">v0.3 Beta</span>
+      <p>© 2026 Meta-Xceed, Inc. &middot; Apache-2.0</p>
+      <p class="about-build" id="aboutBuild">Build 2026.09.21</p>
+      <div class="about-links">
+        <button type="button" class="about-link" id="btnReleaseNotes"
+                aria-haspopup="dialog">Release Notes</button>
+        <span class="about-link-sep" aria-hidden="true">&middot;</span>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-sm btn-dark about-ok" type="submit" value="ok">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dialog release-notes-dialog" id="releaseNotesDialog"
+        aria-labelledby="releaseNotesTitle">
+  <form method="dialog">
+    <div class="release-notes-head">
+      <h2 id="releaseNotesTitle">Release Notes</h2>
+      <span class="about-badge" id="releaseNotesVersion">v0.3 Beta</span>
+    </div>
+    <div class="release-notes-body" id="releaseNotesBody" tabindex="0">
+      <p class="release-notes-status">Loading release notes&hellip;</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-sm btn-dark" type="submit" value="close">Close</button>
+    </div>
+  </form>
+</dialog>
+
+<footer>
+  <div class="foot">
+    <span class="foot-mark mono">Migrate Studio</span>
+    <span>© 2026 Meta-Xceed, Inc. &middot; Apache-2.0</span>
+    <span class="right mono" id="footState">—</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- The zip container for .xlsx. The only third-party file in the tool, kept
+     here rather than fetched from a CDN so the rule book loads and the fixed
+     programs zip with no network and off a file:// page. MIT; the licence sits
+     beside it. -->
+<script src="js/vendor/fflate.min.js"></script>
+
+<script src="js/mig-excel.js"></script>
+<script src="js/mig-rules.js"></script>
+<script src="js/mig-diff.js"></script>
+<!-- Shiny edition: fetch() bridge and optional server folder mode. Both must
+     load before migrate-studio.js. -->
+<script src="js/mig-shiny-bridge.js"></script>
+<script src="js/mig-server-fs.js"></script>
+<script src="js/migrate-studio.js"></script>
+</body>
+</html>

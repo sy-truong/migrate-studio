@@ -1,0 +1,1650 @@
+/* ===========================================================================
+ * Migrate Studio
+ *
+ * The application visual language — IBM Plex Sans for prose, IBM Plex Mono for
+ * anything technical, warm off-white ground, white cards, thin borders,
+ * coral→pink→violet accent — adapted for a data-dense metadata editor.
+ *
+ * Layout is a three-column application shell: a report navigator on the left,
+ * the selected report in the middle, and what you need while editing it on the
+ * right. The page does not scroll; each column scrolls independently, so the
+ * navigator and the inspector stay put while you work through a long report.
+ *
+ * Everything Migrate Studio needs is here: the tokens, the shared chrome and the
+ * editor components. Nothing is loaded from the parent folder, so this tool
+ * can be moved or served on its own. css/theme.css carries the dark overrides
+ * and must be linked after this file.
+ * =========================================================================
+ * Migrate Studio
+ *
+ * Copyright (c) 2026 Meta-Xceed, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
+:root{
+  /* ---- core palette (same twenty tokens as the rest of the site) ------ */
+  --bg:#fcfbf8;
+  --ink:#1c1815;
+  --muted:#6f655c;
+  /* One step between --ink and --muted, for section and panel headings: dark
+     enough to read as a heading against the off-white ground, light enough
+     that it does not compete with the report title. */
+  --heading:#403c38;
+  --line:rgba(28,24,21,.1);
+  --card:#ffffff;
+  --coral:#ff7a59;
+  --pink:#ff4d8d;
+  --violet:#8b5cf6;
+  --blue:#378add;
+  --green:#639922;
+  --amber:#f5a623;
+  --red:#d64545;
+  /* File-format icons. Kept separate from status green/amber because these
+     need to read as format cues at small icon stroke weight. */
+  --file-excel:#217346;
+  --file-json:#b45309;
+  /* Code surfaces. Separate from --dark, which stays a deliberately dark
+     surface for toast-style UI. These follow the clock so code views do not
+     stay dark on an otherwise light page. */
+  --code-bg:#faf8f4;
+  --code-fg:#1c1815;
+  --code-gutter:#837a72;
+  --code-comment:#007a00;
+  --code-string:#a31515;
+  --code-macro:#0000ff;
+  --code-key:#0451a5;
+  --code-number:#0a7043;
+  --code-const:#0000ff;
+  --code-add:#1a7031;
+  --code-del:#b31d28;
+  --code-hunk:#005cc5;
+  --code-meta:#6a737d;
+  --dark:#1a1b1b;
+  --dark-2:#232525;
+  --grad:linear-gradient(92deg,var(--coral) 0%,var(--pink) 48%,var(--violet) 100%);
+  --tint-coral:#fff1ec;
+  --tint-pink:#fdeef5;
+  --tint-violet:#f2edfe;
+  --tint-blue:#eaf3fc;
+  --tint-green:#f0f6e7;
+  --tint-amber:#fdf3e0;
+  --tint-red:#fdeeee;
+  --diff-delete-bg:#fde7ef;
+  --diff-change-bg:var(--tint-amber);
+  --radius:14px;
+
+  --sel-bg:#1c1815;
+  --sel-fg:#ffffff;
+  --sel-ring:#1c1815;
+  --seg-on-bg:#ffffff;
+  --seg-on-ring:rgba(28,24,21,.18);
+
+  --surface-2:#f4f1ea;
+  --surface-3:#faf8f4;
+  --edge:rgba(28,24,21,.28);
+  --edge-hover:rgba(28,24,21,.22);
+  --shadow-1:rgba(28,24,21,.06);
+  --shadow-2:rgba(28,24,21,.1);
+  --shadow-3:rgba(28,24,21,.3);
+  --veil:rgba(252,251,248,.97);
+  --veil-nav:rgba(252,251,248,.85);
+  --btn-dark-bg:#1c1815;
+  --btn-dark-fg:#ffffff;
+
+  /* ---- editor tokens -------------------------------------------------- */
+  /* A grid needs one more surface than a marketing page: the header strip,
+     the zebra stripe and the focused cell all have to be distinguishable from
+     the card behind them without adding borders everywhere. */
+  --grid-head:#f4f1ea;
+  --grid-zebra:#faf8f4;
+  --grid-hover:#f7f3ec;
+  --grid-selected:var(--tint-violet);
+  --grid-line:rgba(28,24,21,.09);
+  --cell-focus:var(--violet);
+
+  --nav-h:60px;
+  --rail-w:272px;
+  --ctx-w:336px;
+
+  color-scheme:light;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--ink);
+  -webkit-font-smoothing:antialiased;line-height:1.5;
+  -webkit-tap-highlight-color:transparent;
+  min-height:100vh;min-height:100dvh;overflow:hidden;
+}
+.mono{font-family:'IBM Plex Mono',monospace}
+a{color:inherit;text-decoration:none}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ---------------------------------------------------------------------------
+ * Top bar
+ * ------------------------------------------------------------------------ */
+nav{
+  position:sticky;top:0;z-index:50;background:var(--veil-nav);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{display:flex;align-items:center;gap:16px;height:var(--nav-h);
+  padding:0 18px}
+.logo{display:flex;align-items:center;gap:9px;flex:none}
+button.logo{
+  background:none;border:none;padding:0;cursor:pointer;font:inherit;color:inherit;
+}
+button.logo:hover .logo-app,
+button.logo:focus-visible .logo-app{
+  text-decoration:underline;text-underline-offset:3px;
+}
+.logo-img{display:block;filter:drop-shadow(0 3px 8px rgba(255,77,141,.28));
+  border-radius:9px}
+.logo-app{font-size:17px;font-weight:700;letter-spacing:0;white-space:nowrap}
+
+/* Editable label -----------------------------------------------------------
+ * Sits next to the fixed product name. At rest it has to read as text, not as
+ * a control -- a button that looks like a button here would compete with Save
+ * and Generate. The affordance is on hover and focus only.
+ */
+.nav-label-wrap{display:flex;align-items:center;gap:8px;min-width:0;flex:none}
+.nav-label-sep{color:var(--line-strong,var(--line));font-size:15px;
+  user-select:none}
+.nav-label{
+  font:inherit;font-size:15px;font-weight:500;color:var(--muted);
+  max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  background:none;border:1px solid transparent;border-radius:8px;
+  padding:4px 8px;cursor:text;transition:background .15s ease,color .15s ease;
+}
+.nav-label:hover{background:var(--surface-2);color:var(--ink)}
+.nav-label:focus-visible{outline:2px solid var(--violet);outline-offset:1px}
+/* Nothing set: still clickable, and says so rather than looking broken. */
+.nav-label.is-empty{font-style:italic;opacity:.65}
+.nav-label-input{
+  font-family:inherit;font-size:15px;font-weight:500;color:var(--ink);
+  width:240px;max-width:40vw;padding:4px 8px;
+  background:var(--card);border:1px solid var(--violet);border-radius:8px;
+}
+.nav-label-input:focus{outline:2px solid var(--violet);outline-offset:1px}
+.nav-label-input[hidden]{display:none}
+
+.nav-project{min-width:0}
+.nav-select,.mini-select{
+  font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:500;
+  padding:6px 28px 6px 11px;border:1px solid var(--line);border-radius:999px;
+  background:var(--card) no-repeat right 10px center;color:var(--ink);
+  background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236f655c' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  -webkit-appearance:none;appearance:none;cursor:pointer;max-width:240px;
+}
+.nav-select:focus-visible,.mini-select:focus-visible{
+  outline:2px solid var(--violet);outline-offset:2px}
+/* Only one project ships today, so the selector is disabled. Left to itself a
+   disabled <select> under color-scheme:dark renders as diagonal stripes in
+   Chromium, which reads as broken rather than as "nothing to choose". */
+.nav-select:disabled{
+  opacity:1;cursor:default;background-image:none;padding-right:11px;
+  background-color:var(--surface-2);color:var(--muted);
+}
+
+.nav-state{margin-left:4px;min-width:0}
+.save-state{
+  font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  border-radius:999px;padding:4px 11px;white-space:nowrap;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--muted);
+}
+.save-state.clean{background:var(--tint-green);color:#456b13;
+  border-color:rgba(99,153,34,.28)}
+.save-state.dirty{background:var(--tint-amber);color:#8a5c07;
+  border-color:rgba(245,166,35,.34)}
+.save-state.offline{background:var(--tint-blue);color:#1d5c94;
+  border-color:rgba(55,138,221,.3)}
+
+.nav-cta{margin-left:auto;display:flex;gap:8px;align-items:center}
+.nav-cta .btn{white-space:nowrap}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:8px 16px;border-radius:999px;font-weight:600;font-size:13.5px;
+  border:1px solid var(--line);cursor:pointer;background:transparent;
+  color:var(--ink);font-family:inherit;text-align:center;
+  transition:transform .14s ease,box-shadow .14s ease,background .14s ease;
+}
+.btn:hover{transform:translateY(-1px);background:var(--surface-2)}
+.btn:active{transform:scale(.98)}
+.btn:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+.btn-primary{background:var(--grad);color:#fff;border:none;
+  box-shadow:0 6px 18px rgba(255,77,141,.3)}
+.btn-primary:hover{background:var(--grad);box-shadow:0 9px 24px rgba(255,77,141,.4)}
+.btn-dark{background:var(--btn-dark-bg);color:var(--btn-dark-fg);
+  border:1px solid var(--btn-dark-bg)}
+.btn-dark:hover{background:var(--btn-dark-bg);opacity:.9}
+.btn-danger{color:var(--red);border-color:rgba(214,69,69,.3)}
+.btn-danger:hover{background:var(--tint-red)}
+.btn-sm{padding:7px 13px;font-size:13px}
+.btn-xs{padding:4px 10px;font-size:12px;font-weight:600;border-radius:999px}
+.btn-icon{padding:7px 11px;font-size:15px;line-height:1}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+/* display:inline-flex above beats the user-agent [hidden]{display:none}, so
+   without this every `hidden` button stays on screen. */
+.btn[hidden]{display:none}
+.file-type-icon{
+  width:18px;height:18px;flex:0 0 18px;display:inline-flex;
+  align-items:center;justify-content:center;line-height:1;color:currentColor;
+}
+.file-type-icon svg{
+  width:18px;height:18px;display:block;fill:none;stroke:currentColor;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+}
+.file-type-excel{color:var(--file-excel)}
+.file-type-json{color:var(--file-json)}
+.file-type-json svg text{fill:currentColor;stroke:none}
+.btn-xs .file-type-icon{margin-block:-3px}
+
+/* overflow menu -------------------------------------------------------- */
+.menu-wrap{position:relative}
+.menu{
+  position:absolute;right:0;top:calc(100% + 8px);min-width:250px;z-index:60;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 18px 40px var(--shadow-2);padding:6px;
+}
+.menu[hidden]{display:none}
+.menu button{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:36px;
+  padding:8px 10px;border:0;background:transparent;font-family:inherit;
+  font-size:13.5px;color:var(--ink);text-align:left;border-radius:8px;
+  cursor:pointer;
+}
+.menu button:hover{background:var(--surface-2)}
+.menu-icon{
+  width:18px;height:18px;flex:0 0 18px;display:inline-flex;
+  align-items:center;justify-content:center;color:currentColor;
+}
+.menu-icon svg{
+  width:17px;height:17px;display:block;fill:none;stroke:currentColor;
+  stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;
+}
+.menu-label{min-width:0;flex:1 1 auto;white-space:nowrap}
+.menu-avatar{
+  width:22px;height:22px;flex:0 0 22px;display:inline-flex;
+  align-items:center;justify-content:center;border-radius:50%;
+  background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+  font-size:10px;font-weight:600;line-height:1;letter-spacing:-.2px;
+  text-transform:uppercase;
+}
+.menu-sep{height:1px;background:var(--line);margin:5px 8px}
+
+.nav-burger{display:none;width:40px;height:40px;border:0;background:transparent;
+  cursor:pointer;position:relative;padding:0;flex:none}
+.nav-burger span{position:absolute;left:9px;right:9px;height:2px;
+  background:var(--ink);border-radius:2px;
+  transition:transform .25s ease,opacity .25s ease,top .25s ease}
+.nav-burger span:nth-child(1){top:13px}
+.nav-burger span:nth-child(2){top:19px}
+.nav-burger span:nth-child(3){top:25px}
+.nav-burger[aria-expanded="true"] span:nth-child(1){top:19px;transform:rotate(45deg)}
+.nav-burger[aria-expanded="true"] span:nth-child(2){opacity:0}
+.nav-burger[aria-expanded="true"] span:nth-child(3){top:19px;transform:rotate(-45deg)}
+
+/* ---------------------------------------------------------------------------
+ * Banner and loading
+ * ------------------------------------------------------------------------ */
+.banner{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:9px 18px;background:var(--tint-blue);
+  border-bottom:1px solid rgba(55,138,221,.28);font-size:13px;color:#1d5c94;
+}
+.banner[hidden]{display:none}
+.banner-mark{font-size:10.5px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;background:var(--card);border-radius:999px;
+  padding:3px 9px;border:1px solid rgba(55,138,221,.3);flex:none}
+.banner-text{flex:1;min-width:220px}
+.banner-body{flex:1;min-width:240px;display:flex;flex-direction:column;gap:6px}
+.banner-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;flex:none}
+.banner-steps{list-style:none;display:flex;flex-direction:column;gap:3px;
+  font-size:11.5px;opacity:.9}
+.banner-steps li{padding-left:13px;position:relative}
+.banner-steps li::before{content:"→";position:absolute;left:0;opacity:.6}
+.banner-steps[hidden]{display:none}
+
+/* Missing Git is a warning, not information: editing works, versioning does
+   not. Amber rather than the blue used for "you are in standalone mode". */
+.banner-warn{background:var(--tint-amber);border-bottom-color:rgba(245,166,35,.34);
+  color:#8a5c07}
+.banner-warn .banner-mark{border-color:rgba(245,166,35,.4)}
+.banner-ok{background:var(--tint-green);border-bottom-color:rgba(99,153,34,.3);
+  color:#456b13}
+.banner-ok .banner-mark{border-color:rgba(99,153,34,.35)}
+.banner-busy .banner-text{display:flex;align-items:center;gap:8px}
+
+.load-state{display:flex;align-items:center;gap:12px;color:var(--muted);
+  font-size:14.5px;padding:60px 24px}
+.load-state[hidden],.app-frame[hidden]{display:none}
+.spinner,.toast-spinner,.status-spinner{display:inline-block;width:14px;height:14px;
+  flex:0 0 auto;border:2px solid currentColor;border-right-color:transparent;
+  border-radius:50%;animation:tlf-status-spin .8s linear infinite;
+  transform-origin:center center}
+.spinner{width:16px;height:16px;color:var(--violet);border-color:var(--line);
+  border-right-color:var(--violet)}
+@keyframes tlf-status-spin{
+  from{transform:rotate(0deg)}
+  to{transform:rotate(360deg)}
+}
+
+/* ---------------------------------------------------------------------------
+ * The three-column frame
+ *
+ * Height is pinned to the viewport minus the top bar so each column owns its
+ * own scrollbar. A single page scroll would take the navigator and the
+ * inspector out of view exactly when a long report needs them.
+ * ------------------------------------------------------------------------ */
+.app-frame{
+  display:grid;
+  grid-template-columns:var(--rail-w) minmax(0,1fr) var(--ctx-w);
+  height:calc(100vh - var(--nav-h));
+  height:calc(100dvh - var(--nav-h));
+  min-height:0;
+  overflow:hidden;
+}
+
+/* ---------------------------------------------------------------------------
+ * Section and panel headings
+ *
+ * One rule for every label that introduces an area — the rail title, the
+ * context-rail card heads and the work header's section line. Title case in
+ * the sans face rather than spaced-out uppercase mono: at this size the
+ * uppercase letterforms were the thing making them hard to scan, not the
+ * weight. Keep new headings on .section-title rather than restyling in place.
+ * ------------------------------------------------------------------------ */
+.section-title,
+.rail-eyebrow,
+.ctx-eyebrow,
+.work-eyebrow{
+  font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;
+  letter-spacing:.01em;line-height:1.3;text-transform:none;
+  color:var(--heading);
+}
+/* The work header introduces the whole centre panel, so it sits one step up
+   from the rail and card headings. */
+.work-eyebrow{font-size:15px}
+
+/* ---------------------------------------------------------------------------
+ * Left: report navigator
+ * ------------------------------------------------------------------------ */
+.nav-rail{
+  display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--line);background:var(--surface-3);
+}
+.rail-head{display:flex;align-items:center;gap:10px;padding:16px 14px 12px}
+.rail-title{display:flex;align-items:center;gap:8px}
+.rail-select-link{
+  border:0;background:transparent;padding:0;margin:0;
+  font:inherit;font-size:12.5px;font-weight:600;color:var(--violet);
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+  white-space:nowrap;
+}
+.rail-select-link:hover{color:var(--violet);text-decoration:none}
+.rail-select-link:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+.rail-head .btn{margin-left:auto}
+
+.rail-controls{display:flex;flex-direction:column;gap:7px;padding:0 14px 10px}
+.rail-search{
+  font-family:'IBM Plex Sans',sans-serif;font-size:13px;padding:7px 12px;
+  border:1px solid var(--line);border-radius:999px;background:var(--card);
+  color:var(--ink);width:100%;
+}
+.rail-search:focus{outline:2px solid var(--violet);outline-offset:1px}
+.rail-groupby .mini-select{width:100%;max-width:none}
+
+.rail-tree{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:0 8px 10px}
+.rail-empty{padding:22px 14px;color:var(--muted);font-size:13px;text-align:center}
+
+.rail-group{
+  display:flex;align-items:center;gap:7px;width:100%;border:0;cursor:pointer;
+  /* Group labels are data — shell templates, dataset names — so they read as
+     written rather than forced to uppercase. */
+  background:transparent;font-family:'IBM Plex Sans',sans-serif;font-size:12px;
+  font-weight:600;letter-spacing:.01em;text-transform:none;
+  color:var(--muted);padding:12px 6px 5px;text-align:left;
+}
+.rail-group-chevron{transition:transform .18s ease;font-size:9px}
+.rail-group.is-collapsed .rail-group-chevron{transform:rotate(-90deg)}
+.rail-group-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.rail-group-count{opacity:.75}
+
+.rail-item{
+  display:flex;align-items:center;gap:9px;width:100%;border:0;cursor:pointer;
+  background:transparent;padding:7px 8px;border-radius:9px;text-align:left;
+  font-family:inherit;color:inherit;
+}
+.rail-item:hover{background:var(--grid-hover)}
+.rail-item.is-selected{background:var(--grid-selected);
+  box-shadow:inset 2px 0 0 var(--violet)}
+.rail-item:focus-visible{outline:2px solid var(--violet);outline-offset:-2px}
+.rail-dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--green)}
+.rail-dot.warning{background:var(--amber)}
+.rail-dot.error{background:var(--red)}
+.rail-check{flex:0 0 auto;margin:0 2px 0 0;accent-color:var(--violet)}
+.rail-check:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+.rail-item-body{flex:1;min-width:0;display:flex;flex-direction:column}
+.rail-number{font-size:12.5px;font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.rail-hit{background:var(--tint-violet);color:var(--violet);border-radius:3px;
+  padding:0 1px}
+.rail-program{font-size:11px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.rail-rows{font-size:11px;color:var(--muted);flex:none;
+  font-variant-numeric:tabular-nums}
+
+.rail-foot{display:flex;gap:14px;padding:10px 14px;border-top:1px solid var(--line);
+  background:var(--card)}
+.rail-stat{display:flex;flex-direction:column;gap:1px}
+.rail-stat .k{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted)}
+.rail-stat .v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---------------------------------------------------------------------------
+ * Centre: the editor
+ * ------------------------------------------------------------------------ */
+.work{display:flex;flex-direction:column;min-width:0;min-height:0;
+  overflow:hidden;background:var(--bg)}
+
+.work-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;
+  padding:16px 22px 12px}
+.work-title{min-width:0;flex:1}
+/* The gradient fill this used to carry read as decoration at 11px uppercase
+   and lost too much contrast; the heading colour above carries it now. */
+.work-eyebrow{margin-bottom:2px}
+.work-head h1{font-family:'IBM Plex Mono',monospace;font-size:26px;
+  font-weight:600;letter-spacing:-.02em;margin:4px 0 10px;word-break:break-word}
+.work-meta{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:999px;
+  padding:3px 9px;max-width:280px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.work-actions{display:flex;gap:7px;flex:none}
+
+.pill{display:inline-flex;align-items:center;gap:5px;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;border-radius:999px;
+  padding:3px 9px;border:1px solid transparent;white-space:nowrap}
+.pill-ok{background:var(--tint-green);color:#456b13;border-color:rgba(99,153,34,.28)}
+.pill-warning{background:var(--tint-amber);color:#8a5c07;border-color:rgba(245,166,35,.34)}
+.pill-error{background:var(--tint-red);color:#932f2f;border-color:rgba(214,69,69,.3)}
+
+.seg{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:999px;padding:4px;flex-wrap:wrap}
+.tab-seg{margin:0 22px 0}
+.seg-btn{
+  flex:1 1 auto;min-width:84px;border:0;background:transparent;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
+  color:var(--muted);padding:7px 11px;border-radius:999px;
+  transition:background .18s ease,color .18s ease;
+}
+.seg-btn.is-on{background:var(--seg-on-bg);color:var(--ink);
+  box-shadow:0 0 0 1.5px var(--seg-on-ring),0 2px 8px var(--shadow-2)}
+.seg-btn:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+
+.tab-panel{display:none;flex:1;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;padding:16px 22px 28px}
+.tab-panel.is-on{display:block}
+.panel-note{font-size:12.5px;color:var(--muted);border-left:2px solid var(--line);
+  padding-left:12px;margin-bottom:14px}
+
+/* ---------------------------------------------------------------------------
+ * Grouped field containers
+ *
+ * Twenty-five report fields and eighteen row fields is too many to meet as a
+ * flat list, so each group is a labelled container that can be collapsed. The
+ * filled count on the header is what makes a collapsed group still useful:
+ * it says whether there is anything inside without opening it.
+ * ------------------------------------------------------------------------ */
+.fgroups{display:flex;flex-direction:column;gap:12px;max-width:1100px}
+.tab-panel[data-panel="history"] .fgroups{max-width:none}
+.analysis-spec{max-width:1100px;display:flex;flex-direction:column;gap:12px}
+.analysis-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--card)}
+.analysis-status strong{font-size:13px;color:var(--heading)}
+.analysis-status .pill{margin-left:auto}
+.spec-section{background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden}
+.spec-head{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.spec-head h2{font-size:14px;font-weight:650;color:var(--heading)}
+.spec-count{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+  color:var(--muted)}
+.spec-body{padding:12px 14px;display:grid;gap:10px}
+.spec-list{list-style:none;display:grid;gap:8px}
+.spec-list li{font-size:12.5px;line-height:1.45;padding:8px 10px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:8px}
+.spec-list .mono{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.spec-empty{font-size:12.5px;color:var(--muted)}
+.spec-json{max-height:260px;overflow:auto;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:8px;padding:10px;
+  font-size:11.5px;line-height:1.5}
+.spec-editor{width:100%;min-height:320px;resize:vertical;background:var(--code-bg);
+  color:var(--code-fg);border:1px solid var(--line);border-radius:8px;padding:10px;
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.5}
+.spec-editor:focus{outline:2px solid var(--violet);outline-offset:1px}
+.spec-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.spec-message{font-size:12px;color:var(--muted)}
+.spec-message.err{color:#932f2f}
+.spec-message.ok{color:#456b13}
+.fgroup{background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden}
+.fgroup-head{
+  display:flex;align-items:center;gap:9px;width:100%;border:0;cursor:pointer;
+  background:transparent;padding:12px 16px;text-align:left;font-family:inherit;
+  color:var(--ink);
+}
+.fgroup-head:hover{background:var(--surface-3)}
+.fgroup-head:focus-visible{outline:2px solid var(--violet);outline-offset:-2px}
+.fgroup-chevron{color:var(--muted);font-size:11px;transition:transform .18s ease;
+  flex:none;display:inline-block;transform:rotate(0deg)}
+.fgroup > .fgroup-head > .fgroup-chevron{transform:rotate(0deg)}
+.fgroup.is-open > .fgroup-head > .fgroup-chevron{transform:rotate(90deg)}
+.fgroup-title{font-size:14px;font-weight:600;letter-spacing:-.01em;flex:1;
+  color:var(--heading)}
+.fgroup-count{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fgroup-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.fgroup-dot.warning{background:var(--amber)}
+.fgroup-dot.error{background:var(--red)}
+.fgroup-body{display:none;padding:4px 16px 16px;
+  grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px 16px}
+.fgroup.is-open .fgroup-body{display:grid}
+.fgroup.is-open .history-group-body{display:flex}
+.history-group-body{flex-direction:column;gap:12px}
+.fgroup-body.compact{grid-template-columns:1fr;gap:11px}
+
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field.wide{grid-column:1/-1}
+.fgroup-body.compact .field.wide{grid-column:auto}
+.field label{font-size:12.5px;font-weight:600;display:flex;align-items:center;
+  gap:6px;flex-wrap:wrap}
+.field label .req{color:var(--pink);font-weight:700}
+.field .excel{font-family:'IBM Plex Mono',monospace;font-size:10px;
+  font-weight:500;color:var(--muted);letter-spacing:.02em}
+.field input,.field select,.field textarea{
+  font-family:'IBM Plex Sans',sans-serif;font-size:13.5px;padding:7px 10px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface-3);
+  color:var(--ink);width:100%;
+}
+.field input.mono,.field textarea.mono,.field select.mono{
+  font-family:'IBM Plex Mono',monospace;font-size:12.5px}
+.field textarea{resize:vertical;min-height:56px;line-height:1.5}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:2px solid var(--violet);outline-offset:-1px;background:var(--card)}
+.field .hint{font-size:11px;color:var(--muted);line-height:1.45}
+.field .msg{font-size:11px;font-weight:600}
+.field .msg.err{color:#932f2f}
+.field .msg.warn{color:#8a5c07}
+.field.has-error input,.field.has-error select,.field.has-error textarea{
+  border-color:rgba(214,69,69,.55)}
+.field.has-warning input,.field.has-warning select,.field.has-warning textarea{
+  border-color:rgba(245,166,35,.55)}
+
+/* ---------------------------------------------------------------------------
+ * Row grid
+ * ------------------------------------------------------------------------ */
+.grid-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  margin-bottom:11px}
+.grid-toolbar-left,.grid-toolbar-right{display:flex;gap:6px;align-items:center;
+  flex-wrap:wrap}
+.grid-toolbar-right{margin-left:auto}
+.mini-search{
+  font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;padding:5px 11px;
+  border:1px solid var(--line);border-radius:999px;background:var(--surface-3);
+  color:var(--ink);width:160px;
+}
+.mini-search:focus{outline:2px solid var(--violet);outline-offset:1px}
+.mini-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+  color:var(--muted);cursor:pointer;white-space:nowrap}
+.mini-check input{accent-color:var(--violet)}
+
+.grid-scroll{
+  overflow:auto;max-height:calc(100vh - 320px);border:1px solid var(--line);
+  border-radius:12px;background:var(--card);overscroll-behavior:contain;
+}
+.row-grid{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
+.row-grid th{
+  position:sticky;top:0;z-index:3;background:var(--grid-head);
+  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:8px 9px;white-space:nowrap;
+  border-bottom:1px solid var(--line);border-right:1px solid var(--grid-line);
+}
+.row-grid td{padding:0;border-bottom:1px solid var(--grid-line);
+  border-right:1px solid var(--grid-line);vertical-align:middle;
+  background:var(--card)}
+.row-grid tbody tr:nth-child(even) td{background:var(--grid-zebra)}
+.row-grid tbody tr:hover td{background:var(--grid-hover)}
+.row-grid tbody tr.is-selected td{background:var(--grid-selected)}
+.row-grid tbody tr.is-dragging{opacity:.45}
+.row-grid tbody tr.drop-before td{box-shadow:inset 0 2px 0 var(--violet)}
+.row-grid tbody tr.drop-after td{box-shadow:inset 0 -2px 0 var(--violet)}
+
+/* The handle, order and select columns pin so a row stays identifiable
+   while the grid is scrolled sideways.
+
+   Their left offsets are hard numbers, so the widths have to be hard numbers
+   too — a table cell treats `width` as a suggestion and will happily grow,
+   which slides every pinned column out of position and lets one overlap the
+   next. min-width and max-width together make it binding. box-sizing is
+   border-box globally, so these include the 1px right border. */
+.row-grid .c-handle{position:sticky;left:0;z-index:2;
+  width:34px;min-width:34px;max-width:34px}
+.row-grid th.c-handle{z-index:4}
+.row-grid .c-order{position:sticky;left:34px;z-index:2;
+  width:44px;min-width:44px;max-width:44px;text-align:right}
+.row-grid th.c-order{z-index:4}
+.row-grid .c-select{position:sticky;left:78px;z-index:2;
+  width:62px;min-width:62px;max-width:62px;text-align:center}
+.row-grid th.c-select{z-index:4}
+.row-grid .c-status{width:30px;min-width:30px;max-width:30px}
+
+.drag-handle{display:flex;align-items:center;justify-content:center;height:30px;
+  cursor:grab;color:var(--muted);font-size:12px;user-select:none;line-height:1}
+.drag-handle:active{cursor:grabbing}
+.order-cell{display:block;padding:0 8px;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.status-dot{display:block;width:7px;height:7px;border-radius:50%;margin:0 auto;
+  background:transparent}
+.status-dot.err{background:var(--red)}
+.status-dot.warn{background:var(--amber)}
+.row-select{
+  width:auto !important;min-height:auto !important;margin:0;padding:0 !important;
+  accent-color:var(--violet);
+}
+.row-select:focus-visible{outline:2px solid var(--cell-focus);outline-offset:2px}
+.grid-select-link{
+  border:0;background:transparent;padding:0;margin:0;color:var(--violet);font:inherit;
+  font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer;
+}
+.grid-select-link:hover{text-decoration:none;color:var(--violet)}
+.grid-select-link:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+
+.row-grid input,.row-grid select,.row-grid textarea{
+  width:100%;border:0;background:transparent;color:inherit;padding:6px 9px;
+  font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;border-radius:0;
+  min-height:30px;
+}
+.row-grid .cell-code input,.row-grid .cell-code textarea,
+.row-grid .cell-mono input{font-family:'IBM Plex Mono',monospace;font-size:12px}
+.row-grid .cell-num input{text-align:right;font-family:'IBM Plex Mono',monospace;
+  font-variant-numeric:tabular-nums}
+.row-grid select{-webkit-appearance:none;appearance:none;cursor:pointer;
+  padding-right:20px;
+  background:no-repeat right 6px center url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%236f655c' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")}
+.row-grid input:focus,.row-grid select:focus,.row-grid textarea:focus{
+  outline:2px solid var(--cell-focus);outline-offset:-2px;background:var(--card);
+  position:relative;z-index:1}
+.row-grid textarea{resize:vertical;line-height:1.45;min-height:30px}
+.row-grid .cell-invalid input,.row-grid .cell-invalid select{
+  box-shadow:inset 0 0 0 1.5px rgba(214,69,69,.5)}
+
+.grid-hint{margin-top:9px;font-size:11px;color:var(--muted)}
+.grid-empty{padding:30px 16px;text-align:center;color:var(--muted);font-size:13.5px}
+
+/* ---------------------------------------------------------------------------
+ * Preview, strips and code
+ * ------------------------------------------------------------------------ */
+/* The preview reads top to bottom the way the printed report does: title
+   lines, the shell, then footnotes. Mono, because the output is a fixed-width
+   RTF and proportional text would flatter the line lengths. */
+.preview-page{display:flex;flex-direction:column;gap:12px}
+.tab-download-actions{
+  display:flex;justify-content:flex-end;align-items:center;gap:8px;
+  margin-top:14px;padding-top:10px;border-top:1px solid var(--line);
+}
+.preview-titles{display:flex;flex-direction:column;gap:3px}
+.preview-title{font-family:'IBM Plex Mono',monospace;font-size:13px;
+  font-weight:600;color:var(--ink);line-height:1.45;word-break:break-word}
+.preview-title.is-subtitle{font-weight:500;color:var(--muted)}
+.preview-title.is-center{text-align:center}
+.preview-title.is-left{text-align:left}
+.preview-title.is-right{text-align:right}
+.preview-footnotes{display:flex;flex-direction:column;gap:3px}
+.preview-footnote{font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  color:var(--muted);line-height:1.5;word-break:break-word}
+.preview-none{font-size:11.5px;color:var(--muted);font-style:italic;
+  text-align:center}
+
+.table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;
+  background:var(--card)}
+.shell-preview{width:100%;border-collapse:collapse;font-size:12.5px}
+.shell-preview th{
+  background:var(--grid-head);font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);padding:9px 12px;text-align:center;
+  border-bottom:1px solid var(--line);white-space:pre-line;
+}
+.shell-preview th.first-col{text-align:left;min-width:250px}
+.shell-preview th.span-head{border-bottom:1px solid var(--grid-line);
+  color:var(--ink);text-transform:none;font-size:12px}
+.shell-preview td{padding:5px 12px;border-bottom:1px solid var(--grid-line)}
+.shell-preview td.cell{text-align:center;color:var(--muted);
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.shell-preview tr.label-row td{font-weight:600;background:var(--surface-3)}
+.shell-preview tr.block-start td{border-top:1px solid var(--line)}
+.shell-preview .stat{color:var(--muted)}
+
+.strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.strip-path{font-size:12px;color:var(--muted);word-break:break-all}
+.strip-actions{margin-left:auto;display:flex;gap:6px;align-items:center;
+  flex-wrap:wrap}
+.strip-status{font-size:12.5px;color:var(--muted);margin-bottom:10px}
+.strip-status.busy{display:flex;align-items:center;gap:8px}
+.strip-status.warn{color:#8a5c07}
+.strip-status.err{color:#932f2f}
+
+.sas-panel{display:flex;flex-direction:column;min-height:0;
+  transition:box-shadow .18s ease, border-color .18s ease}
+.sas-panel-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;
+  min-height:32px}
+.sas-panel-head .strip-status{margin-bottom:0;flex:1;min-width:0}
+.sas-view-controls{margin-left:auto;display:flex;align-items:center;gap:8px;
+  flex:0 0 auto}
+.sas-icon-btn{
+  width:32px;height:32px;display:inline-flex;align-items:center;
+  justify-content:center;border:1px solid var(--line);border-radius:8px;
+  background:var(--card);color:var(--muted);cursor:pointer;padding:0;
+  transition:background .16s ease,color .16s ease,border-color .16s ease;
+}
+.sas-icon-btn:hover,.sas-icon-btn[aria-pressed="true"]{
+  color:var(--violet);border-color:rgba(116,83,214,.38);
+  background:var(--tint-violet);
+}
+.sas-icon-btn:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+.sas-icon-btn svg{width:18px;height:18px;display:block;stroke:currentColor;
+  stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+.code-view{
+  background:var(--code-bg);border-radius:12px;padding:14px 16px;overflow:auto;
+  max-height:calc(100vh - 330px);border:1px solid var(--line);
+}
+.sas-code-view{transition:max-height .18s ease, opacity .16s ease,
+  padding .18s ease, border-width .18s ease}
+.sas-code-view.is-mega-lines{padding-left:8px}
+.sas-code-view.is-mega-lines .ln{
+  width:calc(var(--sas-line-digits,7) * 1ch);margin-right:7px}
+.sas-panel.is-collapsed .sas-code-view{
+  max-height:0;min-height:0;overflow:hidden;opacity:0;padding-top:0;
+  padding-bottom:0;border-width:0;
+}
+.code-view pre{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;
+  color:var(--code-fg);white-space:pre;tab-size:3;
+}
+.code-view .ln{display:inline-block;width:3.4em;margin-right:14px;
+  text-align:right;color:var(--code-gutter);user-select:none}
+.code-view .cmt{color:var(--code-comment)}
+.code-view .mcr{color:var(--code-macro)}
+.code-view .str{color:var(--code-string)}
+/* JSON */
+.code-view .jk{color:var(--code-key)}
+.code-view .js{color:var(--code-string)}
+.code-view .jn{color:var(--code-number)}
+.code-view .jb{color:var(--code-const)}
+/* diff colouring */
+.code-view .dl-add{color:var(--code-add)}
+.code-view .dl-del{color:var(--code-del)}
+.code-view .dl-hunk{color:var(--code-hunk)}
+.code-view .dl-file,.code-view .dl-meta{color:var(--code-meta)}
+
+body.fixed-panel-expanded .app-frame,
+body.compare-panel-expanded .app-frame{
+  grid-template-columns:minmax(0,1fr);
+  transition:grid-template-columns .18s ease;
+}
+body.fixed-panel-expanded .nav-rail,
+body.fixed-panel-expanded .context-rail,
+body.fixed-panel-expanded .work-head,
+body.fixed-panel-expanded .tab-seg,
+body.fixed-panel-expanded .nav-burger,
+body.fixed-panel-expanded .tab-panel:not([data-panel="fixed"]),
+body.compare-panel-expanded .nav-rail,
+body.compare-panel-expanded .context-rail,
+body.compare-panel-expanded .work-head,
+body.compare-panel-expanded .tab-seg,
+body.compare-panel-expanded .nav-burger,
+body.compare-panel-expanded .tab-panel:not([data-panel="compare"]){
+  display:none;
+}
+body.fixed-panel-expanded .tab-panel[data-panel="fixed"],
+body.compare-panel-expanded .tab-panel[data-panel="compare"]{
+  display:flex;flex-direction:column;overflow:hidden;padding:14px 18px 18px;
+}
+body.fixed-panel-expanded .sas-panel,
+body.compare-panel-expanded .sas-panel{flex:1;min-height:0}
+body.fixed-panel-expanded .sas-code-view,
+body.compare-panel-expanded .cmp-view{flex:1;max-height:none}
+.sas-panel:fullscreen{
+  height:100vh;background:var(--bg);padding:14px 18px 18px;
+}
+.sas-panel:fullscreen .sas-code-view{flex:1;max-height:none}
+
+.file-json-view{
+  grid-column:1/-1;width:100%;min-height:360px;
+  max-height:calc(100vh - 300px);
+}
+.file-json-toolbar{
+  grid-column:1/-1;margin:0;align-items:center;
+}
+.file-json-toolbar .strip-actions{margin-left:auto}
+
+.file-actions{display:flex;gap:18px;flex-wrap:wrap;grid-column:1/-1;
+  align-items:center}
+.file-actions-main,.file-actions-ars{display:flex;gap:8px;flex-wrap:wrap}
+.file-actions-ars{padding-left:18px;border-left:1px solid var(--line)}
+
+/* ---------------------------------------------------------------------------
+ * Version history
+ * ------------------------------------------------------------------------ */
+.history-panel{position:relative}
+.history-panel > .fgroup-head{padding-right:96px}
+.history-view-controls{
+  position:absolute;top:6px;right:10px;display:flex;align-items:center;gap:8px;
+  z-index:2;pointer-events:none;
+}
+.history-view-controls > *{pointer-events:auto}
+.history-split{display:grid;grid-template-columns:minmax(320px,44%) minmax(0,1fr);
+  gap:14px;align-items:start}
+.history-list{display:flex;flex-direction:column;gap:6px;
+  max-height:calc(100vh - 300px);overflow-y:auto;overscroll-behavior:contain;
+  padding-right:2px}
+.history-empty{padding:26px 16px;text-align:center;color:var(--muted);
+  font-size:13px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px}
+.history-empty .hint-cmd{margin-top:8px;font-size:11.5px;
+  background:var(--surface-2);border-radius:8px;padding:7px 10px;
+  word-break:break-all}
+
+.version-row{background:var(--card);border:1px solid var(--line);
+  border-radius:11px;overflow:hidden}
+.version-row.is-current{border-color:rgba(139,92,246,.45)}
+.version-row.is-selected{box-shadow:0 0 0 1.5px var(--violet)}
+.version-head{display:flex;align-items:center;gap:8px;padding:9px 12px;
+  cursor:pointer}
+.version-head:hover{background:var(--surface-3)}
+.version-head:focus-visible{outline:2px solid var(--violet);outline-offset:-2px}
+.version-tick{accent-color:var(--violet);flex:none;cursor:pointer}
+.version-chevron{color:var(--muted);font-size:10px;flex:none;
+  transition:transform .18s ease}
+.version-row.is-open .version-chevron{transform:rotate(90deg)}
+.version-id{font-size:12px;font-weight:700;flex:none}
+.version-chip{font-family:'IBM Plex Mono',monospace;font-size:9.5px;
+  font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  background:var(--tint-violet);color:#5b3fb0;border-radius:999px;
+  padding:2px 7px;flex:none}
+.version-message{flex:1;min-width:0;font-size:12.5px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.version-stats{display:flex;gap:6px;font-size:11px;flex:none}
+.version-stats .added{color:#456b13}
+.version-stats .removed{color:#932f2f}
+.version-age{font-size:11px;color:var(--muted);flex:none;white-space:nowrap}
+
+.version-detail{display:none;padding:2px 12px 12px 40px;
+  border-top:1px solid var(--grid-line)}
+.version-row.is-open .version-detail{display:block}
+.version-line{display:flex;gap:10px;font-size:12px;padding:3px 0}
+.version-line .k{flex:none;width:66px;font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.version-line .v{flex:1;min-width:0;word-break:break-word}
+.version-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.version-actions .primary{border-color:var(--violet);color:var(--violet)}
+.version-actions .primary:hover{background:var(--tint-violet)}
+
+.history-detail{background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:14px 16px;min-height:200px}
+.history-detail .detail-title{font-size:13px;font-weight:600;margin-bottom:10px}
+.history-detail .detail-title.loading{display:flex;align-items:center;gap:8px}
+.history-detail .detail-note{font-size:12.5px;color:var(--muted);line-height:1.5}
+.history-detail .detail-note.err{color:#932f2f}
+.history-detail .code-view{max-height:calc(100vh - 380px)}
+
+body.history-panel-expanded .app-frame{
+  grid-template-columns:minmax(0,1fr);
+  transition:grid-template-columns .18s ease;
+}
+body.history-panel-expanded .nav-rail,
+body.history-panel-expanded .context-rail,
+body.history-panel-expanded .work-head,
+body.history-panel-expanded .tab-seg,
+body.history-panel-expanded .nav-burger,
+body.history-panel-expanded .tab-panel:not([data-panel="history"]){
+  display:none;
+}
+body.history-panel-expanded .tab-panel[data-panel="history"]{
+  display:flex;flex-direction:column;overflow:hidden;padding:14px 18px 18px;
+}
+body.history-panel-expanded .tab-panel[data-panel="history"] .fgroups{
+  display:flex;flex-direction:column;flex:1;min-height:0;
+}
+body.history-panel-expanded .history-sub[data-subtab="program"] .fgroup:not(#historyPanel){
+  display:none;
+}
+body.history-panel-expanded #historyPanel{
+  display:flex;flex-direction:column;flex:1;min-height:0;
+}
+body.history-panel-expanded #historyPanel .history-group-body{
+  flex:1;min-height:0;
+}
+body.history-panel-expanded #historyPanel .history-split{
+  flex:1;min-height:0;align-items:stretch;
+}
+body.history-panel-expanded #historyPanel .history-list{
+  max-height:none;
+}
+body.history-panel-expanded #historyPanel .history-detail{
+  min-height:0;overflow:auto;
+}
+body.history-panel-expanded #historyPanel .history-detail .code-view{
+  max-height:none;
+}
+#historyPanel:fullscreen{
+  height:100vh;display:flex;flex-direction:column;background:var(--bg);
+  padding:0;
+}
+#historyPanel.is-open:fullscreen .history-group-body{
+  display:flex;flex:1;min-height:0;padding:4px 16px 16px;
+}
+#historyPanel:fullscreen .history-split{
+  flex:1;min-height:0;align-items:stretch;
+}
+#historyPanel:fullscreen .history-list{
+  max-height:none;
+}
+#historyPanel:fullscreen .history-detail{
+  min-height:0;overflow:auto;
+}
+#historyPanel:fullscreen .history-detail .code-view{
+  max-height:none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Migration history dashboard
+ * ------------------------------------------------------------------------ */
+.history-sub{display:flex;flex-direction:column;gap:12px}
+.history-sub[hidden]{display:none}
+.sub-seg{align-self:flex-start}
+.history-note{
+  font-size:12.5px;color:#8a5c07;background:var(--tint-amber);
+  border:1px solid rgba(245,166,35,.34);border-radius:10px;padding:9px 11px;
+}
+.dash{display:flex;flex-direction:column;gap:14px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:10px}
+.kpi-card{background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:12px 14px}
+.kpi-value{font-size:24px;font-weight:700;color:var(--heading);
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi-label{font-size:11.5px;color:var(--muted);margin-top:4px}
+.history-asof{font-size:12px;color:var(--muted)}
+.dash-row{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dash-row-title{margin:0;font-size:12.5px;font-weight:600;color:var(--heading);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-row-body{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);
+  gap:12px;align-items:start;min-width:0}
+.dash-row-solo{grid-template-columns:minmax(0,1fr)}
+.folder-rows{display:flex;flex-direction:column;gap:12px}
+.chart-card{background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:12px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:6px;
+  font-size:11px;color:var(--muted)}
+.chart-key{display:inline-flex;align-items:center;gap:5px}
+.chart-key::before{content:'';width:9px;height:9px;border-radius:2px}
+.chart-key-programs::before{background:var(--violet)}
+.chart-key-fixes::before{background:var(--coral)}
+.run-chart{display:block;width:100%;height:auto}
+.chart-grid{stroke:var(--line);stroke-width:1}
+.chart-tick{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.chart-folder{font-variant-numeric:normal}
+.chart-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart-line-programs{stroke:var(--violet)}
+.chart-line-fixes{stroke:var(--coral)}
+.chart-dot-programs{fill:var(--violet)}
+.chart-dot-fixes{fill:var(--coral)}
+.rule-bars{background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.rule-bars h3{font-size:13px;color:var(--heading);margin:0 0 2px}
+.rule-bar-row{display:grid;grid-template-columns:58px minmax(140px,1fr) minmax(120px,34%) 54px;
+  gap:9px;align-items:center;font-size:12.5px}
+.rule-bar-id,.rule-bar-count{font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.rule-bar-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rule-bar-track{height:9px;background:var(--surface-3);border-radius:999px;
+  overflow:hidden}
+.rule-bar-fill{display:block;height:100%;background:var(--violet);
+  border-radius:inherit}
+.rule-bar-fill.high{background:var(--red)}
+.rule-bar-fill.medium{background:var(--amber)}
+.rule-bar-fill.low{background:var(--green)}
+.run-history-groups{max-width:none}
+.history-folder-section{display:flex;flex-direction:column;gap:8px}
+.history-folder-section + .history-folder-section{margin-top:8px}
+.history-list-search{margin:0 0 10px}
+.history-folder-section[hidden],
+.history-program-group[hidden],
+.history-folder-summary[hidden],
+.summary-table tbody tr[hidden]{display:none}
+.run-folder-body,.history-program-body{grid-template-columns:1fr;gap:12px}
+.fgroup:not(.is-open) > .run-folder-body,
+.fgroup:not(.is-open) > .history-program-body{display:none}
+.fgroup.is-open > .run-folder-body,
+.fgroup.is-open > .history-program-body{display:grid}
+.run-chip-row{display:flex;gap:6px;flex-wrap:wrap}
+.run-chip{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);
+  background:var(--surface-3);border:1px solid var(--line);border-radius:999px;
+  padding:3px 7px}
+.history-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px;
+  background:var(--card)}
+.detail-table{width:100%;border-collapse:collapse;font-size:12px;min-width:980px}
+.detail-table th{position:sticky;top:0;background:var(--dark);color:#fff;
+  text-align:left;font-weight:650;padding:8px 9px;white-space:nowrap}
+.detail-table td{border-top:1px solid var(--grid-line);padding:7px 9px;
+  vertical-align:top}
+.detail-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.detail-table .muted{color:var(--muted)}
+.detail-table .code-cell{white-space:pre-wrap;min-width:220px}
+.summary-table{min-width:620px}
+.change-chip{display:inline-block;border-radius:999px;padding:2px 7px;
+  font-size:10.5px;font-weight:650}
+.change-chip.Added{background:var(--tint-green);color:#456b13}
+.change-chip.Modified{background:var(--tint-amber);color:#8a5c07}
+.change-chip.Deleted{background:var(--tint-red);color:#932f2f}
+.history-more{font-size:12px;color:var(--muted);padding:4px 2px}
+
+@media (max-width:900px){
+  .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dash-row-body{grid-template-columns:minmax(0,1fr)}
+  .rule-bar-row{grid-template-columns:52px minmax(0,1fr) 48px}
+  .rule-bar-track{grid-column:1/-1;grid-row:2}
+}
+
+/* ---------------------------------------------------------------------------
+ * Right: contextual rail
+ * ------------------------------------------------------------------------ */
+.context-rail{
+  display:flex;flex-direction:column;gap:12px;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;padding:16px 16px 28px;
+  border-left:1px solid var(--line);background:var(--surface-3);
+}
+.ctx-card{background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;flex:none}
+.ctx-card[hidden]{display:none}
+.ctx-head{display:flex;align-items:center;gap:9px;padding:13px 14px 11px;
+  border-bottom:1px solid var(--line)}
+.ctx-eyebrow{flex:1}
+.ctx-badge{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+  font-weight:600;letter-spacing:.03em;border-radius:999px;padding:3px 9px;
+  background:var(--surface-2);color:var(--muted);border:1px solid var(--line);
+  white-space:nowrap}
+.ctx-badge.ok{background:var(--tint-green);color:#456b13;
+  border-color:rgba(99,153,34,.28)}
+.ctx-badge.warning{background:var(--tint-amber);color:#8a5c07;
+  border-color:rgba(245,166,35,.34)}
+.ctx-badge.error{background:var(--tint-red);color:#932f2f;
+  border-color:rgba(214,69,69,.3)}
+.ctx-body{padding:12px 14px 14px}
+/* The inspector nests field groups inside a card, so its own containers lose
+   their border and sit flush — two nested boxes read as clutter. */
+.ctx-body .fgroups{gap:6px}
+.ctx-body .fgroup{border:0;border-radius:0;border-top:1px solid var(--line)}
+.ctx-body .fgroup:first-child{border-top:0}
+.ctx-body .fgroup-head{padding:9px 2px}
+.ctx-body .fgroup-body{padding:0 2px 12px}
+
+.ctx-lines{display:flex;flex-direction:column;gap:7px}
+.ctx-lines div{display:flex;gap:10px;align-items:baseline;font-size:12.5px}
+/* Supporting metadata — program, datasets, rows. Deliberately the quietest of
+   the three levels so the headings above stay the thing you scan for. */
+.ctx-lines dt{flex:none;width:78px;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;font-weight:500;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted)}
+.ctx-lines dd{flex:1;min-width:0;word-break:break-word}
+.ctx-lines dd.mono{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.ctx-lines dd.none{color:var(--muted)}
+
+.issue-list{list-style:none;display:flex;flex-direction:column;gap:8px}
+.issue-list li{font-size:12px;line-height:1.45;padding-left:15px;position:relative}
+.issue-list li::before{content:"";position:absolute;left:0;top:5px;
+  width:7px;height:7px;border-radius:50%}
+.issue-list li.err::before{background:var(--red)}
+.issue-list li.warn::before{background:var(--amber)}
+.issue-list li .where{font-family:'IBM Plex Mono',monospace;font-size:10px;
+  color:var(--muted);display:block}
+.issue-list li.issue-empty{padding-left:0;color:var(--muted)}
+.issue-list li.issue-empty::before{display:none}
+.issue-list li.clickable{cursor:pointer}
+.issue-list li.clickable:hover{color:var(--violet)}
+
+.mini-versions{list-style:none;display:flex;flex-direction:column;gap:7px;
+  margin-bottom:10px}
+.mini-versions li{display:flex;gap:8px;align-items:baseline;font-size:12px;
+  cursor:pointer}
+.mini-versions li:hover .mv-msg{color:var(--violet)}
+.mini-versions li.issue-empty{color:var(--muted);cursor:default}
+.mv-id{flex:none;font-size:10.5px;font-weight:700;color:var(--muted)}
+.mv-msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.mv-age{flex:none;font-size:10px;color:var(--muted)}
+
+/* ---------------------------------------------------------------------------
+ * Dialogs
+ * ------------------------------------------------------------------------ */
+.dialog{
+  border:1px solid var(--line);border-radius:var(--radius);padding:0;
+  background:var(--card);color:var(--ink);max-width:520px;width:calc(100vw - 40px);
+  box-shadow:0 30px 80px var(--shadow-3);
+  /* The `*{margin:0}` reset above beats the user-agent `dialog{margin:auto}`,
+     which is the only thing centring a modal dialog. Without this it opens
+     pinned to the top-left corner. */
+  margin:auto;
+}
+.dialog::backdrop{background:rgba(28,24,21,.42);backdrop-filter:blur(2px)}
+.dialog form{padding:22px 22px 18px}
+.dialog h2{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-bottom:7px}
+.dialog-note{font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+.about-dialog{max-width:540px}
+.about-dialog form{padding:24px}
+.about-brand{
+  display:flex;align-items:center;gap:12px;margin-bottom:10px;
+}
+.about-logo{
+  display:block;flex:0 0 52px;filter:drop-shadow(0 5px 14px rgba(255,77,141,.28));
+  border-radius:12px;
+}
+.about-dialog .about-title{
+  font-size:30px;font-weight:700;line-height:1.1;letter-spacing:0;margin-bottom:0;
+}
+.about-body{
+  display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+  margin-bottom:22px;color:var(--muted);font-size:15px;line-height:1.45;
+}
+.about-badge{
+  display:inline-flex;align-items:center;height:26px;padding:0 10px;
+  border-radius:999px;background:var(--surface-2);border:1px solid var(--line);
+  color:var(--heading);font-size:15px;font-weight:600;
+}
+.about-build{font-size:14px;color:var(--muted)}
+.about-body a{
+  color:var(--accent,var(--pink));font-size:15px;font-weight:600;text-decoration:none;
+}
+.about-body a:hover{text-decoration:underline;text-underline-offset:3px}
+.about-dialog .dialog-actions{margin-top:4px}
+.about-ok{
+  width:80px;height:40px;padding:0;border-radius:8px;font-size:14px;
+}
+.about-links{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.about-link{
+  background:none;border:0;padding:0;margin:0;cursor:pointer;
+  font:inherit;font-size:15px;font-weight:600;color:var(--accent,var(--pink));
+}
+.about-link:hover{text-decoration:underline;text-underline-offset:3px}
+.about-link:focus-visible{outline:2px solid var(--violet);outline-offset:2px;border-radius:3px}
+.about-link-sep{color:var(--muted)}
+.release-notes-dialog{max-width:720px}
+.release-notes-dialog form{padding:24px}
+.release-notes-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px 12px;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.release-notes-dialog .release-notes-head h2{font-size:22px;margin-bottom:0}
+.release-notes-body{
+  max-height:62vh;overflow:auto;margin-bottom:18px;padding:4px 16px 12px;
+  border:1px solid var(--line);border-radius:10px;background:var(--surface-3);
+  color:var(--ink);font-size:13.5px;line-height:1.55;
+}
+.release-notes-body:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+.release-notes-body h3{
+  margin:16px 0 4px;font-size:17px;font-weight:700;letter-spacing:0;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;
+  color:transparent;
+}
+.release-notes-body h4{
+  margin:14px 0 6px;font-size:14px;font-weight:700;color:var(--heading);
+}
+.release-notes-body p{margin:6px 0}
+.release-notes-body ul{margin:4px 0 8px;padding-left:20px}
+.release-notes-body li{margin:5px 0}
+.release-notes-body li::marker{color:var(--violet)}
+.release-notes-body strong{color:var(--ink);font-weight:600}
+.release-notes-body code{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;padding:1px 5px;
+  border-radius:4px;background:var(--tint-violet);color:var(--violet);
+}
+.release-notes-body pre{
+  margin:8px 0;padding:10px 12px;overflow:auto;border-radius:8px;
+  background:var(--code-bg);border:1px solid var(--line);
+}
+.release-notes-body pre code{background:none;padding:0;color:var(--code-fg)}
+.release-notes-body hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.release-notes-body a{color:var(--accent,var(--pink));font-weight:600}
+.release-notes-status{color:var(--muted)}
+.ars-warnings-dialog{max-width:760px}
+.ars-warning-list{display:flex;flex-direction:column;gap:10px;max-height:52vh;
+  overflow:auto;margin-bottom:16px}
+.ars-warning{border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  background:var(--surface-2);font-size:12.5px;line-height:1.45}
+.ars-warning-title{font-weight:700;margin-bottom:5px}
+.ars-warning-line{display:flex;gap:8px;align-items:baseline;word-break:break-word}
+.ars-warning-line .k{flex:0 0 78px;font-family:'IBM Plex Mono',monospace;
+  font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.dialog .field{margin-bottom:14px}
+.dialog-changes{display:flex;flex-direction:column;gap:4px;margin-bottom:14px;
+  max-height:170px;overflow-y:auto}
+.change-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  padding:4px 9px;border-radius:7px;background:var(--surface-2);color:var(--muted)}
+.change-line.add{background:var(--tint-green);color:#456b13}
+.change-line.del{background:var(--tint-red);color:#932f2f}
+.change-line.edit{background:var(--tint-blue);color:#1d5c94}
+.dialog-warn{font-size:12px;color:#8a5c07;background:var(--tint-amber);
+  border:1px solid rgba(245,166,35,.34);border-radius:9px;padding:9px 11px;
+  margin-bottom:14px}
+.dialog-warn[hidden]{display:none}
+.dialog-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* ---------------------------------------------------------------------------
+ * Import review
+ *
+ * Wider than the other dialogs because the findings quote a sheet, an Excel
+ * row, a column and a value on one line, and wrapping that makes it harder to
+ * scan than the extra width costs.
+ * ------------------------------------------------------------------------ */
+.import-dialog{max-width:720px}
+.import-stats{list-style:none;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;
+  margin-bottom:16px}
+.import-stats li{display:flex;align-items:baseline;gap:7px;font-size:12.5px;
+  color:var(--muted)}
+.import-stat-value{font-size:15px;font-weight:600;color:var(--ink);
+  font-variant-numeric:tabular-nums;min-width:2ch;text-align:right}
+.import-stats li.is-error .import-stat-value{color:var(--red)}
+.import-stats li.is-warn .import-stat-value{color:#8a5c07}
+
+.import-finding-block{border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.import-finding-block.is-error{background:var(--tint-red);
+  border:1px solid rgba(214,69,69,.3)}
+.import-finding-block.is-warning{background:var(--tint-amber);
+  border:1px solid rgba(245,166,35,.34)}
+.import-finding-head{font-size:12.5px;font-weight:600;margin-bottom:7px}
+.import-finding-block.is-error .import-finding-head{color:#932f2f}
+.import-finding-block.is-warning .import-finding-head{color:#8a5c07}
+.import-finding-list{list-style:none;display:flex;flex-direction:column;
+  gap:4px;max-height:220px;overflow-y:auto;font-size:11.5px;line-height:1.5}
+.import-finding-more{opacity:.75;font-style:italic}
+
+.import-changes{margin-bottom:14px}
+.import-changes[hidden]{display:none}
+.import-change-list{list-style:none;display:flex;flex-direction:column;gap:5px;
+  max-height:260px;overflow-y:auto}
+.import-change-list li{display:flex;align-items:baseline;gap:9px;
+  font-size:12.5px;color:var(--muted)}
+.import-change-mark{font-size:10.5px;font-weight:600;border-radius:999px;
+  padding:2px 8px;flex:none}
+.import-change-mark.is-add{background:var(--tint-green);color:#456b13}
+.import-change-mark.is-del{background:var(--tint-red);color:#932f2f}
+.import-change-mark.is-edit{background:var(--tint-blue);color:#1d5c94}
+.import-change-name{color:var(--ink);font-size:12px;flex:none}
+.import-change-detail{min-width:0}
+
+/* ---------------------------------------------------------------------------
+ * Titles and footnotes editor
+ * ------------------------------------------------------------------------ */
+/* The field groups lay their scalar fields out in a grid; a title is one line
+   across, not a cell in that grid, so every part of this editor spans it. */
+.fgroup-body > .line-row,
+.fgroup-body > .line-empty,
+.fgroup-body > .line-issue,
+.fgroup-body > .btn{grid-column:1/-1}
+.fgroup-body > .btn{justify-self:start}
+.line-row{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.line-order{font-size:11px;color:var(--muted);width:2ch;flex:none;
+  text-align:right}
+.line-input{font-family:'IBM Plex Sans',sans-serif;font-size:13px;
+  padding:7px 10px;border:1px solid var(--line);border-radius:9px;
+  background:var(--card);color:var(--ink);min-width:0;flex:none;width:120px}
+.line-input.is-text{flex:1}
+.line-input:focus{outline:2px solid var(--violet);outline-offset:1px}
+.line-select{font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  padding:6px 9px;border:1px solid var(--line);border-radius:9px;
+  background:var(--card);color:var(--ink);flex:none}
+.line-empty{font-size:12.5px;color:var(--muted);margin-bottom:9px}
+.line-issue{font-size:11.5px;color:var(--red);margin-bottom:7px}
+
+/* ---------------------------------------------------------------------------
+ * Footer and toast
+ * ------------------------------------------------------------------------ */
+footer{border-top:1px solid var(--line);padding:9px 18px;color:var(--muted);
+  font-size:12px;background:var(--card)}
+.foot{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.foot-mark{font-weight:600;color:var(--ink);font-size:12px}
+.foot .right{margin-left:auto;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;text-align:right}
+
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);
+  background:var(--dark);color:#f3efe9;border-radius:999px;
+  padding:10px 20px;font-size:13px;font-weight:500;z-index:90;max-width:min(560px,90vw);
+  box-shadow:0 14px 38px var(--shadow-3);opacity:0;text-align:center;
+  transition:opacity .2s ease,transform .2s ease;pointer-events:none;
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.toast.err{background:var(--red)}
+/* Migrate Studio: a rule that matched nothing, or a folder that cannot be written to,
+   is neither an error nor plain news. Amber, and it reads on the dark pill. */
+.toast.warn{background:#8a5c07;color:#fff8ea}
+.toast.loading,.toast.busy{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+
+.logout-screen{
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:32px;color:var(--ink);
+  background:var(--bg);
+}
+.logout-screen h1{margin:0 0 10px;font-size:28px}
+.logout-screen p{margin:0;color:var(--muted);font-size:15px}
+
+/* ---------------------------------------------------------------------------
+ * Responsive
+ *
+ * 1500px: the right rail is the first thing to narrow — it holds summaries,
+ *         not the thing being edited.
+ * 1240px: three columns no longer fit. The right rail is removed from the
+ *         live layout so the centre panel keeps the viewport-height editor.
+ * 1080px: the navigator becomes a drawer behind the burger.
+ *  640px: the row grid stops being a grid; each row becomes a stacked card so
+ *         a phone can edit without a sideways scroll of twenty columns.
+ * ------------------------------------------------------------------------ */
+@media (max-width:1500px){
+  :root{--ctx-w:300px;--rail-w:248px}
+}
+
+@media (max-width:1240px){
+  .app-frame{
+    grid-template-columns:var(--rail-w) minmax(0,1fr);
+    height:calc(100vh - var(--nav-h));
+    height:calc(100dvh - var(--nav-h));
+    min-height:0;
+    overflow:hidden;
+  }
+  .work{min-height:0;overflow:hidden}
+  .tab-panel{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  .context-rail{display:none}
+  .nav-rail{position:relative;top:auto;height:auto;min-height:0}
+  .history-list{max-height:520px}
+}
+
+@media (max-width:1080px){
+  .app-frame{grid-template-columns:minmax(0,1fr)}
+  .nav-burger{display:block}
+  .nav-rail{
+    position:fixed;top:var(--nav-h);left:0;bottom:0;width:min(300px,86vw);
+    height:auto;
+    z-index:48;transform:translateX(-102%);transition:transform .22s ease;
+    box-shadow:0 18px 50px var(--shadow-2);
+  }
+  body.rail-open .nav-rail{transform:none}
+  body.rail-open{overflow:hidden}
+  .nav-project{display:none}
+  .context-rail{padding:16px 18px 28px}
+}
+
+@media (max-width:1024px){
+  .logo-app{font-size:15px}
+  .nav-label{max-width:180px}
+}
+
+@media (max-width:760px){
+  .nav-inner{gap:10px;padding:0 14px}
+  .nav-cta .btn:not(.btn-primary):not(.btn-icon){display:none}
+  .logo-app{font-size:14px}
+  /* On a phone the toolbar is already full; the label is renamed rarely and
+     read never, so it goes rather than squeezing everything else. */
+  .nav-label-wrap{display:none}
+  .work-head{padding:14px 16px 10px}
+  .tab-seg{
+    margin:0 16px;border-radius:14px;padding:6px;gap:5px;
+    flex-wrap:wrap;
+  }
+  .tab-panel{padding:14px 16px 24px}
+  .history-split{grid-template-columns:1fr}
+  .fgroup-body{grid-template-columns:1fr}
+  .mini-search,.rail-search{width:100%}
+  .grid-toolbar-right{margin-left:0;width:100%}
+}
+
+@media (max-width:640px){
+  /* Row grid becomes stacked cards. Each cell carries its column name in a
+     data attribute so the label can be printed beside the input. */
+  .grid-scroll{max-height:none;overflow:visible;border:0;border-radius:0}
+  .row-grid,.row-grid tbody,.row-grid tr,.row-grid td{display:block;width:auto}
+  .row-grid thead{display:none}
+  .row-grid tbody tr{
+    border:1px solid var(--line);border-radius:12px;margin-bottom:12px;
+    padding:6px 4px 10px;background:var(--card);
+  }
+  .row-grid tbody tr:nth-child(even) td,
+  .row-grid tbody tr:hover td{background:transparent}
+  .row-grid tbody tr.is-selected{border-color:var(--violet);
+    box-shadow:0 0 0 1px var(--violet)}
+  .row-grid tbody tr.is-selected td{background:transparent}
+  .row-grid td{
+    border:0;display:grid;grid-template-columns:104px minmax(0,1fr);
+    align-items:center;gap:8px;padding:3px 10px;position:static;width:auto;
+  }
+  .row-grid td::before{
+    content:attr(data-label);font-family:'IBM Plex Mono',monospace;
+    font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);
+  }
+  .row-grid td.c-handle,.row-grid td.c-status{display:none}
+  .row-grid td.c-select{
+    display:grid;position:static;width:auto;min-width:0;max-width:none;
+    text-align:left;
+  }
+  .row-grid input,.row-grid select,.row-grid textarea{
+    border:1px solid var(--line);border-radius:8px;background:var(--surface-3)}
+  .row-grid .row-select{
+    justify-self:start;border:0;background:transparent;
+  }
+  .grid-hint{display:none}
+  .foot .right{margin-left:0;width:100%;text-align:left}
+}
+
+/* ===========================================================================
+ * Migrate Studio additions
+ *
+ * Everything above is the shared application shell. What follows is
+ * only what Migrate Studio needs on top of it: the folder button in the rail, the
+ * rules table, the side-by-side fix comparison and the small status pills that
+ * count updates against a program.
+ * ========================================================================= */
+
+/* -- rail: Programs -------------------------------------------------------
+ * The count on the right of a program is the number of updates applied to it,
+ * so it has to read as a number first and a badge second. Zero is muted; once
+ * a program has been fixed it takes the violet tint so a scan down the list
+ * shows what has been touched. */
+.rail-count{
+  flex:none;min-width:22px;padding:1px 7px;border-radius:999px;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;
+  text-align:center;font-variant-numeric:tabular-nums;
+  background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
+}
+.rail-count.has-fixes{background:var(--tint-violet);color:var(--violet);
+  border-color:rgba(139,92,246,.32)}
+
+/* The folder button replaces "+ New". An icon plus a word, so it stays legible
+   at btn-xs where a bare icon would not say what it opens. */
+.btn .icon{width:15px;height:15px;flex:0 0 15px;display:block;fill:none;
+  stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn-xs .icon{width:14px;height:14px;flex-basis:14px;margin-block:-2px}
+
+.rail-folder-path{
+  padding:0 14px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+  color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* -- rules table ----------------------------------------------------------
+ * Four columns and a tick. The tick is the only thing on this screen you can
+ * change, so it gets the pinned first column the row grid reserves for
+ * selection; everything else is read-only and reuses the grid's chrome without
+ * any of its editing affordances.
+ *
+ * Cells wrap rather than truncate. A rule's description is the content people
+ * read to decide whether to run it, and hiding half of it defeats the tab. */
+.rules-table td{padding:6px 9px;vertical-align:top;line-height:1.45}
+/* The row grid pins handle / order / select at 34 / 78px to clear a drag
+   handle. There is no handle here, so the tick takes the flush-left slot and
+   the row number follows it. */
+.rules-table .c-select{left:0;width:52px;min-width:52px;max-width:52px}
+.rules-table th.c-select{left:0}
+.rules-table .c-order{left:52px}
+.rules-table th.c-order{left:52px}
+
+.rules-table .c-id{min-width:104px;white-space:nowrap}
+.rules-table .c-name{min-width:170px;max-width:230px}
+.rules-table .c-category{min-width:150px;max-width:210px}
+.rules-table .c-desc{min-width:280px;max-width:640px}
+
+.rules-table td.cell-strong{font-weight:600;color:var(--heading)}
+/* No row tint on selection. Most rules are ticked by default, so tinting them
+   would make the table mostly violet and the tick — the thing you are actually
+   reading — the only part that is not. The unticked rows are what should stand
+   out, and the dimmed documentation rows already do. */
+
+.rule-id{font-weight:600}
+/* A workbook row that produced several Before variants. The tick governs all
+   of them, so the count belongs on the row rather than splitting it. */
+.rule-variants{margin-left:6px;font-size:9.5px;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:999px;
+  padding:1px 5px}
+/* A rule whose After pattern still has a parameter nobody has valued. It
+   cannot be ticked safely, and the mark is what says so at a glance. */
+.rule-flag{display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;margin-left:6px;border-radius:50%;
+  background:var(--tint-amber);color:#8a5c07;border:1px solid rgba(245,166,35,.4);
+  font-size:9.5px;font-weight:700;vertical-align:1px}
+.rules-table td.cell-code{font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  white-space:pre-wrap;word-break:break-word;min-width:140px;max-width:340px}
+.rules-table td.cell-wrap{min-width:72px;max-width:320px;word-break:break-word}
+.rules-table .rule-off{opacity:.45}
+.rules-sheet-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+
+/* -- fix comparison -------------------------------------------------------
+ * Two panes side by side, scrolled together, with one shared line ruler. The
+ * history view's unified diff answers "what changed"; this answers "what does
+ * the fixed program look like", which is the question somebody porting a study
+ * actually asks. */
+.cmp-split{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;
+  min-height:0;
+}
+.cmp-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+.cmp-pane-head{
+  display:flex;align-items:center;gap:8px;margin-bottom:7px;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+}
+.cmp-pane-head .cmp-tag{margin-left:auto;font-size:10px;
+  padding:2px 8px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface-2);text-transform:none;letter-spacing:0}
+.cmp-view{flex:1;min-height:0;max-height:calc(100vh - 360px)}
+.cmp-view pre{white-space:pre}
+/* Rows are blocks, so the gap between two lines is theirs to set. A tighter
+   leading than the flowing code view: the eye is scanning two columns at once
+   and the pairing has to stay obvious. */
+.code-view .dl-row{line-height:1.55;min-height:1.55em}
+/* An empty line still has to occupy a row, or the two panes drift apart. */
+.code-view .dl-row:empty::after,
+.code-view .dl-row.is-gap::after{content:"\200b"}
+/* Source-control-style Fix Compare rows. The row always reserves the left
+   border slot so unchanged/gap rows stay aligned with added/deleted rows. */
+.code-view .dl-row{
+  display:block;border-radius:3px;border-left:3px solid transparent;
+  padding-right:4px;
+}
+/* New content in Fixed. */
+.code-view .dl-row.is-add{
+  background:var(--tint-green);border-left-color:var(--green);
+}
+/* Old content in Original. */
+.code-view .dl-row.is-del{
+  background:var(--diff-delete-bg);border-left-color:var(--red);
+}
+/* Empty opposite-side alignment row. */
+.code-view .dl-row.is-gap{
+  background:var(--surface-2);border-left-color:transparent;opacity:.5;
+}
+/* The marker is a separate gutter immediately before the source line number. */
+.code-view .diff-mark{
+  display:inline-block;width:1.35em;margin-right:4px;text-align:center;
+  font-weight:700;user-select:none;
+}
+.code-view .dl-row.is-add .diff-mark{color:var(--green)}
+.code-view .dl-row.is-del .diff-mark{color:var(--red)}
+/* Stronger token-level highlights inside a modified line. Whole-line tints
+   remain lighter so the precise changed words/operators are easy to locate. */
+.code-view .word-del{background:rgba(214,69,69,.22);border-radius:2px}
+.code-view .word-add{background:rgba(99,153,34,.24);border-radius:2px}
+/* Retained for any non-compare consumer that still emits is-change. The Fix
+   Compare renderer no longer assigns this class to modified rows. */
+.code-view .dl-row.is-change{background:var(--diff-change-bg)}
+.cmp-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cmp-nav{display:inline-flex;align-items:center;gap:6px}
+.cmp-nav-label{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.cmp-nav-btn{white-space:nowrap}
+.cmp-jump-link{
+  background:none;border:0;padding:0;margin:0;
+  font:inherit;font-weight:600;color:var(--violet);
+  text-decoration:underline;text-underline-offset:2px;cursor:pointer;
+}
+.cmp-jump-link:hover{text-decoration-thickness:2px}
+.cmp-jump-link:focus-visible{
+  outline:2px solid var(--violet);outline-offset:2px;border-radius:3px;
+}
+.code-view .dl-row.is-current{
+  outline:2px solid var(--violet);outline-offset:-2px;border-radius:3px;
+}
+.cmp-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  margin-top:10px;font-size:11.5px;color:var(--muted)}
+.cmp-legend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;
+  border:1px solid var(--line);margin-right:5px;vertical-align:-1px}
+.cmp-legend .sw.add{background:var(--tint-green);border-color:var(--green)}
+.cmp-legend .sw.del{background:var(--diff-delete-bg);border-color:var(--red)}
+.cmp-legend .sw.change{
+  background:linear-gradient(90deg,var(--diff-delete-bg) 0 50%,var(--tint-green) 50% 100%);
+  border-color:var(--line);
+}
+
+@media (max-width:900px){
+  .cmp-split{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Expanded and fullscreen behave the same as the SAS panel, so the compare
+   panel opts into the same body class rather than growing its own. */
+body.compare-panel-expanded .tab-panel[data-panel="compare"]{
+  display:flex;flex-direction:column;flex:1;min-height:0}
+body.compare-panel-expanded .cmp-view{max-height:none}
+.cmp-panel:fullscreen{background:var(--bg);padding:18px}
+.cmp-panel:fullscreen .cmp-view{max-height:none}
+
+/* -- rules applied list (right rail) -------------------------------------- */
+.rule-hits{list-style:none;display:flex;flex-direction:column;gap:6px}
+.rule-hits li{
+  display:flex;align-items:baseline;gap:8px;font-size:12px;
+  padding:6px 9px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:8px;
+}
+.rule-hits .rid{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+  color:var(--violet);font-weight:600;flex:none}
+.rule-hits .rtx{flex:1;min-width:0;color:var(--ink);line-height:1.4}
+.rule-hits .rn{font-family:'IBM Plex Mono',monospace;font-size:11px;
+  color:var(--muted);font-variant-numeric:tabular-nums;flex:none}

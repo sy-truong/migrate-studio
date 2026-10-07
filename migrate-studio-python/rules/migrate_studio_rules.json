@@ -1,0 +1,8 @@
+{
+  "schema": "migrate-studio/house-rules",
+  "version": 1,
+  "extends": [],
+  "rules": [],
+  "copyright": "Copyright (c) 2026 Meta-Xceed, Inc.",
+  "license": "Apache-2.0"
+}

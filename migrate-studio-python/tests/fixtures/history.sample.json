@@ -1,0 +1,624 @@
+{
+  "schema": "migrate-studio/history",
+  "version": 1,
+  "runs": [
+    {
+      "runId": "run-001",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-04T16:00:00.000Z",
+      "appliedAtLocal": "2026-09-04 16:00:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Windows",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/sdtm",
+      "rootFolder": "sdtm",
+      "folders": [
+        "sdtm"
+      ],
+      "migrationLabel": "EXAMPLE001 SDTM migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "mc",
+      "rulesSelected": [
+        "O4",
+        "S5"
+      ],
+      "rules": [
+        "O4",
+        "S5"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "dm.sas",
+          "folder": "sdtm"
+        },
+        {
+          "name": "ae.sas",
+          "folder": "sdtm"
+        }
+      ],
+      "programs": [
+        {
+          "name": "dm.sas",
+          "folder": "sdtm",
+          "versionId": "v1",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "S5"
+          ],
+          "ruleCounts": {
+            "S5": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 5,
+              "fixedLine": 5,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input1.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input1.sas\";"
+            }
+          ]
+        },
+        {
+          "name": "ae.sas",
+          "folder": "sdtm",
+          "versionId": "v2",
+          "applications": 2,
+          "lines": 2,
+          "rules": [
+            "S5",
+            "O4"
+          ],
+          "ruleCounts": {
+            "S5": 1,
+            "O4": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 6,
+              "fixedLine": 6,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input2.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input2.sas\";"
+            },
+            {
+              "ruleId": "O4",
+              "ruleName": "Standard setup macro",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 7,
+              "fixedLine": 7,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input3.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input3.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 3,
+        "programs": 2,
+        "lines": 3,
+        "added": 0,
+        "changed": 3,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-002",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-06T17:30:00.000Z",
+      "appliedAtLocal": "2026-09-06 17:30:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Linux",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/adam",
+      "rootFolder": "adam",
+      "folders": [
+        "adam"
+      ],
+      "migrationLabel": "EXAMPLE001 ADAM migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "mc",
+      "rulesSelected": [
+        "S5"
+      ],
+      "rules": [
+        "S5"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "adsl.sas",
+          "folder": "adam"
+        }
+      ],
+      "programs": [
+        {
+          "name": "adsl.sas",
+          "folder": "adam",
+          "versionId": "v2",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "S5"
+          ],
+          "ruleCounts": {
+            "S5": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 6,
+              "fixedLine": 6,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input2.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input2.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 1,
+        "programs": 1,
+        "lines": 1,
+        "added": 0,
+        "changed": 1,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-003",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-09T18:45:00.000Z",
+      "appliedAtLocal": "2026-09-09 18:45:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Linux",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/tlf",
+      "rootFolder": "tlf",
+      "folders": [
+        "tlf"
+      ],
+      "migrationLabel": "EXAMPLE001 TLF migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "workbook",
+      "rulesSelected": [
+        "F1"
+      ],
+      "rules": [
+        "F1"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "t-ae-overall.sas",
+          "folder": "tlf"
+        }
+      ],
+      "programs": [
+        {
+          "name": "t-ae-overall.sas",
+          "folder": "tlf",
+          "versionId": "v3",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "F1"
+          ],
+          "ruleCounts": {
+            "F1": 1
+          },
+          "details": [
+            {
+              "ruleId": "F1",
+              "ruleName": "TOC Casing",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 7,
+              "fixedLine": 7,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input3.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input3.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 1,
+        "programs": 1,
+        "lines": 1,
+        "added": 0,
+        "changed": 1,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-004",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-12T15:15:00.000Z",
+      "appliedAtLocal": "2026-09-12 15:15:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Windows",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/sdtm",
+      "rootFolder": "sdtm",
+      "folders": [
+        "sdtm"
+      ],
+      "migrationLabel": "EXAMPLE001 SDTM migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "mc",
+      "rulesSelected": [
+        "O4",
+        "S5"
+      ],
+      "rules": [
+        "O4",
+        "S5"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "suppae.sas",
+          "folder": "sdtm"
+        },
+        {
+          "name": "autoexec.sas",
+          "folder": "sdtm"
+        }
+      ],
+      "programs": [
+        {
+          "name": "suppae.sas",
+          "folder": "sdtm",
+          "versionId": "v4",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "S5"
+          ],
+          "ruleCounts": {
+            "S5": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 8,
+              "fixedLine": 8,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input4.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input4.sas\";"
+            }
+          ]
+        },
+        {
+          "name": "autoexec.sas",
+          "folder": "sdtm",
+          "versionId": "v5",
+          "applications": 2,
+          "lines": 2,
+          "rules": [
+            "S5",
+            "O4"
+          ],
+          "ruleCounts": {
+            "S5": 1,
+            "O4": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 9,
+              "fixedLine": 9,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input5.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input5.sas\";"
+            },
+            {
+              "ruleId": "O4",
+              "ruleName": "Standard setup macro",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 10,
+              "fixedLine": 10,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input6.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input6.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 3,
+        "programs": 2,
+        "lines": 3,
+        "added": 0,
+        "changed": 3,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-005",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-15T19:20:00.000Z",
+      "appliedAtLocal": "2026-09-15 19:20:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Linux",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/adam",
+      "rootFolder": "adam",
+      "folders": [
+        "adam"
+      ],
+      "migrationLabel": "EXAMPLE001 ADAM migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "mc",
+      "rulesSelected": [
+        "O4",
+        "S5"
+      ],
+      "rules": [
+        "O4",
+        "S5"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "adae.sas",
+          "folder": "adam"
+        },
+        {
+          "name": "adlb.sas",
+          "folder": "adam"
+        }
+      ],
+      "programs": [
+        {
+          "name": "adae.sas",
+          "folder": "adam",
+          "versionId": "v5",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "S5"
+          ],
+          "ruleCounts": {
+            "S5": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 9,
+              "fixedLine": 9,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input5.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input5.sas\";"
+            }
+          ]
+        },
+        {
+          "name": "adlb.sas",
+          "folder": "adam",
+          "versionId": "v6",
+          "applications": 2,
+          "lines": 2,
+          "rules": [
+            "S5",
+            "O4"
+          ],
+          "ruleCounts": {
+            "S5": 1,
+            "O4": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 10,
+              "fixedLine": 10,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input6.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input6.sas\";"
+            },
+            {
+              "ruleId": "O4",
+              "ruleName": "Standard setup macro",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 11,
+              "fixedLine": 11,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input7.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input7.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 3,
+        "programs": 2,
+        "lines": 3,
+        "added": 0,
+        "changed": 3,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-006",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-19T20:05:00.000Z",
+      "appliedAtLocal": "2026-09-19 20:05:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Linux",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/tlf",
+      "rootFolder": "tlf",
+      "folders": [
+        "tlf"
+      ],
+      "migrationLabel": "EXAMPLE001 TLF migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "workbook",
+      "rulesSelected": [
+        "F1"
+      ],
+      "rules": [
+        "F1"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "t-lb-shift.sas",
+          "folder": "tlf"
+        }
+      ],
+      "programs": [
+        {
+          "name": "t-lb-shift.sas",
+          "folder": "tlf",
+          "versionId": "v6",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "F1"
+          ],
+          "ruleCounts": {
+            "F1": 1
+          },
+          "details": [
+            {
+              "ruleId": "F1",
+              "ruleName": "TOC Casing",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 10,
+              "fixedLine": 10,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input6.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input6.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 1,
+        "programs": 1,
+        "lines": 1,
+        "added": 0,
+        "changed": 1,
+        "removed": 0
+      }
+    },
+    {
+      "runId": "run-007",
+      "action": "apply-fix",
+      "appliedAt": "2026-09-22T21:10:00.000Z",
+      "appliedAtLocal": "2026-09-22 21:10:00 PDT",
+      "timezone": "America/Los_Angeles",
+      "user": {
+        "name": "Test User",
+        "email": "test@example.com"
+      },
+      "client": "browser",
+      "osFamily": "Linux",
+      "pathRoot": "/clinicalstudies/EXAMPLE001/adam",
+      "rootFolder": "adam",
+      "folders": [
+        "adam"
+      ],
+      "migrationLabel": "EXAMPLE001 ADAM migration",
+      "ruleBook": "Migrate_Studio_Rules.xlsx",
+      "ruleSource": "mc",
+      "rulesSelected": [
+        "S5"
+      ],
+      "rules": [
+        "S5"
+      ],
+      "targetedPrograms": [
+        {
+          "name": "autoexec.sas",
+          "folder": "adam"
+        }
+      ],
+      "programs": [
+        {
+          "name": "autoexec.sas",
+          "folder": "adam",
+          "versionId": "v7",
+          "applications": 1,
+          "lines": 1,
+          "rules": [
+            "S5"
+          ],
+          "ruleCounts": {
+            "S5": 1
+          },
+          "details": [
+            {
+              "ruleId": "S5",
+              "ruleName": "Windows path backslash",
+              "category": "Synthetic",
+              "severity": "Auto-fix",
+              "type": "Changed",
+              "originalLine": 11,
+              "fixedLine": 11,
+              "before": "filename src \"C:\\ClinicalStudies\\EXAMPLE001\\programs\\input7.sas\";",
+              "after": "filename src \"/clinicalstudies/EXAMPLE001/programs/input7.sas\";"
+            }
+          ]
+        }
+      ],
+      "totals": {
+        "applications": 1,
+        "programs": 1,
+        "lines": 1,
+        "added": 0,
+        "changed": 1,
+        "removed": 0
+      }
+    }
+  ]
+}

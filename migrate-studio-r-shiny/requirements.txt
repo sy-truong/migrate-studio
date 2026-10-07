@@ -1,0 +1,2 @@
+# Optional Python bridge
+openpyxl>=3.1,<4
